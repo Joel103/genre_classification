@@ -1,0 +1,6 @@
+[submodule "models"]
+	path = models
+	url = git@gitlab.tubit.tu-berlin.de:DL4AED-20/models.git
+[submodule "data"]
+	path = data
+	url = git@gitlab.tubit.tu-berlin.de:DL4AED-20/data.git
