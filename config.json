@@ -1,0 +1,28 @@
+{
+    "data_parameter":
+    {
+        "data": "./data/"
+    },
+
+    "model_parameter":
+    {
+        "input_dimensions": [64, 63, 1],
+        "embedding_dimensions": 4096,
+        "output_dimensions": 1
+    },
+
+    "training_parameter":
+    {
+        "epochs": 100,
+        "save_steps": 5,
+        "batch_size": 32,
+        "learning_rate": 0.001,
+        "optimizer_class_name": "adam",
+        "optimizer_parameter": {"beta_1": 0.9, "beta_2": 0.999, "epsilon": 1e-07},
+        "optimizer_clip_parameter": {"clipnorm": 1.0, "clipvalue": 2.0},
+        "dropout_rate": 0.2,
+        "calculation_dtype" : "float16",
+        "calculation_epsilon" : 1e-7,
+        "seed" : 42
+    }
+}
