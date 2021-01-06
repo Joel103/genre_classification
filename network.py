@@ -1,6 +1,3 @@
-# Copyright (c) 2020, Nico Jahn
-# All rights reserved.
-
 """Neural Network class with architecture and loss functions.
 
   Typical usage example:

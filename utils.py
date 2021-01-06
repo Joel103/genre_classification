@@ -1,6 +1,3 @@
-# Copyright (c) 2020, Nico Jahn
-# All rights reserved.
-
 # load model config
 def load_config(config_path="config.json", verbose=1):
     import json

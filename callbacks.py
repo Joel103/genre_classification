@@ -1,6 +1,3 @@
-# Copyright (c) 2020, Nico Jahn
-# All rights reserved.
-
 import tensorflow as tf
 
 class IncreaseEpochCustom(tf.keras.callbacks.Callback):
