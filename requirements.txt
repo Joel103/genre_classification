@@ -1,3 +1,5 @@
 argparse
 sklearn
+wandb==0.10.14
+soundfile
 # tensorflow
