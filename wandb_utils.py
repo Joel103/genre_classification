@@ -7,6 +7,7 @@ Usage suggestion:
 '''
 
 import wandb
+from matplotlib import pyplot as plt
 
 class WandbWrapper():
     """
@@ -30,8 +31,11 @@ class WandbWrapper():
     post_audio(y_orig, y_augm, rate, tag="Data augmentation example"):
         Uploads two audio samples to W&B.
         
-    post_image(y_true, y_pred, tag="Reconstruction example"):
+    post_images(y_true, y_pred, tag="Reconstruction example"):
         Uploads two image samples to W&B.
+    
+    post_image(self, image, caption="", tag="Reconstruction example"):
+        Uploads one image sample to W&B.
         
     post_confusion_matrix(ground_truth, predictions, class_names, tag="Confusion matrix"):
         Creates a confusion matrix (for multi-class, not multi-label problems) and uploads the image to W&B.
@@ -41,6 +45,12 @@ class WandbWrapper():
         
     post_roc_curve(ground_truth, predictions, class_names, classes_to_plot=None, tag="ROC"):
         Creates the ROC(receiver operating characteristic) curves (for multi-class, not multi-label problems) and uploads the image to W&B.
+        
+    post_plt_image(data, prediction=None, title="", tag="", **imshow_kwargs):
+        Uploads one or two image samples to W&B. In the case of two we put them on top of each other.
+    
+    post_plt_histogram(data, prediction=None, title="", tag="", **hist_kwargs):
+        Uploads one or two histograms to W&B. In the case of two we make an overlay in one plot.
     """
 
     def __init__(self, config, **kwargs):
@@ -83,8 +93,8 @@ class WandbWrapper():
             wandb.Audio(y_orig, caption="Original", sample_rate=rate), \
             wandb.Audio(y_augm, caption="Augmented", sample_rate=rate), \
         ]})
-
-    def post_image(self, y_true, y_pred, tag="Reconstruction example"):
+    """
+    def post_images(self, y_true, y_pred, tag="Reconstruction example"):
         '''
         Uploads two image samples to W&B.
 
@@ -97,7 +107,18 @@ class WandbWrapper():
             wandb.Image(y_true, caption="Original"), \
             wandb.Image(y_pred, caption="Prediction"), \
         ]})
+    """
+    """
+    def post_image(self, image, caption="", tag="Image example"):
+        '''
+        Uploads one image sample to W&B.
 
+                Parameters:
+                        image (numpy.ndarray): The image
+                        tag (str): The tag under which the sample should be visible (you could also use track name)
+        '''
+        wandb.log({tag: wandb.Image(image, caption=caption) })
+    """
     def post_confusion_matrix(self, ground_truth, predictions, class_names, tag="Confusion matrix"):
         '''
         Creates a confusion matrix (for multi-class, not multi-label problems) and uploads the image to W&B.
@@ -143,4 +164,48 @@ class WandbWrapper():
             wandb.plot.roc_curve(ground_truth, predictions, labels=class_names, classes_to_plot=None), \
         ]})
 
-    # TODO: Histogram plot for the pixel distribution
+    def post_plt_image(self, data, prediction=None, title="", tag="", **imshow_kwargs):
+        '''
+        Uploads one or two image samples to W&B. In the case of two we put them on top of each other.
+
+                Parameters:
+                        data (numpy.ndarray): The original image with or without augmentations
+                        prediction (optional: numpy.ndarray): The predicted/reconstructed image from the autoencoder
+                        title (str): Plot title
+                        tag (str): The tag under which the samples should be visible (you could also use track name)
+                        **imshow_kwargs (keywords/dict): all other keywords go directly to the imshow call
+        '''
+        fig, (ax0) = plt.subplots(1, figsize=(16, 3), dpi=300)
+        if not prediction is None:
+            plt.close()
+            fig, (ax0, ax1) = plt.subplots(2, sharex=True, figsize=(16, 6), dpi=300)
+        im = ax0.imshow(data, interpolation=None, aspect="auto", **imshow_kwargs)
+        if not prediction is None:
+            im = ax1.imshow(prediction, interpolation=None, aspect="auto", **imshow_kwargs)
+            fig.colorbar(im, ax=(ax0,ax1))
+        else:
+            fig.colorbar(im, ax=ax0)
+        ax0.set_title(title)
+        wandb.log({tag: wandb.Image(plt)})
+        plt.close()
+
+    def post_plt_histogram(self, data, prediction=None, title="", tag="", **hist_kwargs):
+        '''
+        Uploads one or two histograms to W&B. In the case of two we make an overlay in one plot.
+
+                Parameters:
+                        data (numpy.ndarray): The original image with or without augmentations
+                        prediction (optional: numpy.ndarray): The predicted/reconstructed image from the autoencoder
+                        title (str): Plot title
+                        tag (str): The tag under which the samples should be visible (you could also use track name)
+                        **hist_kwargs (keywords/dict): all other keywords go directly to the hist call
+        '''
+        fig, ax = plt.subplots(figsize=(5, 5), dpi=300)
+        plt.hist(data.ravel(), facecolor='r', label="Image", **hist_kwargs)
+        if not prediction is None:
+            plt.hist(prediction.ravel(), facecolor='g', label="Prediction", **hist_kwargs)
+        plt.legend()
+        plt.title(title)
+        plt.tight_layout(pad=1.2, h_pad=0.2, w_pad=0.2)
+        wandb.log({tag: wandb.Image(plt)})
+        plt.close()
