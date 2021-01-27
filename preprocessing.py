@@ -30,7 +30,7 @@ def mel_spectogram(input, rate, mels, fmin, fmax):
     Returns:
       A tensor of mel spectrogram with shape [frames, mels].
     """
-  return tfio.experimental.audio.melscale(spectrogram, rate=rate, mels=mels, fmin=fmin, fmax=fmax)
+  return tfio.experimental.audio.melscale(input, rate=rate, mels=mels, fmin=fmin, fmax=fmax)
 
 def mfcc():
   """
