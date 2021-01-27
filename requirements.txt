@@ -1,5 +1,14 @@
 argparse
 sklearn
+tensorflow==2.4.0
+tensorflow-io
+tensorflow-datasets
+tensorflow-estimator
+tensorflow-hub
+tensorflow-probability
+tensorflow-serving-api
+tf-agents
+transformers
+pydub
 wandb==0.10.14
 soundfile
-# tensorflow
