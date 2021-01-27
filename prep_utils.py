@@ -16,7 +16,10 @@ import random
 
 def wrapper_cast(x):
     x['audio'] = tf.cast(x['audio'], tf.float32)# / 32768.0
-    x['noise_wav'] = tf.cast(x['noise_wav'], tf.float32)# / 32768.0
+    try:
+        x['noise_wav'] = tf.cast(x['noise_wav'], tf.float32)# / 32768.0
+    except KeyError:
+        x['input'] = x['audio']
     return x
 
 def wrapper_cast_label(x):
