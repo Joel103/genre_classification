@@ -35,3 +35,13 @@ def allow_growth():
                   tf.config.experimental.set_memory_growth(gpu, True)
         except RuntimeError as e:
             print(e)
+
+# Copied from stackoverflow. originally posted by @Alex Martelli, license: CC BY-SA 4.0, link: https://stackoverflow.com/a/3233356
+import collections.abc
+def update(d, u):
+    for k, v in u.items():
+        if isinstance(v, collections.abc.Mapping):
+            d[k] = update(d.get(k, {}), v)
+        else:
+            d[k] = v
+    return d
