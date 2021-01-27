@@ -6,9 +6,6 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import random
 
-
-
-
 import librosa
 
 import logging
@@ -20,6 +17,15 @@ AUTOTUNE = tf.data.AUTOTUNE
 
 assert tf.__version__ == '2.4.0'
 
+'''
+TODO:
+ * Wassim: train/val/test split of data (tfds.load --> split) 
+ * Wassim: noise dataset under git version control (LFS)
+ * Joel: video about melspectrogram
+ * Nico: correct paths
+ * All: MFCC needed?
+ * All: Power of spectrogram before melscale?
+'''
 
 class Preprocessor():
     '''
@@ -32,7 +38,6 @@ class Preprocessor():
         self.ready = False
         self.logger = None
         
-        
     def get_config(self):
         return self._config
     
@@ -40,11 +45,11 @@ class Preprocessor():
         self._config.update(update_dict)
         return self._config
     
-    def load_data(self):
+    def load_data(self, download=False):
         # tbd - data has to be downloaded first 
         self.dataset, self.ds_info = tfds.load(self._config['data_root'],
                                                with_info=True,
-                                               download=False,
+                                               download=download,
                                                split=['train'])
         self.dataset = self.dataset[0]
         
@@ -130,21 +135,10 @@ class Preprocessor():
                                            db=0),
                     num_parallel_calls=AUTOTUNE)
         ds = ds.shuffle(buffer_size=self._config['shuffle_batch_size'])
-
         
         self.dataset = ds
         
         self.logger.info('done preprocessing and augmenting data')
-
-
-
-        
-        
-        
-
-
-        
-        
-        
-        
-       
+    
+    def getter(self):
+        return self.dataset
