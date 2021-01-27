@@ -4,16 +4,11 @@ def load_config(config_path="config.json", verbose=1):
     with open(config_path, "r") as config_file:
         config_data = json.load(config_file)
 
-    # extract parameter classes
-    data_parameter = config_data["data_parameter"]
-    model_parameter = config_data["model_parameter"]
-    training_parameter = config_data["training_parameter"]
-
     # show content of config
     if verbose:
         print(json.dumps(config_data, indent=2, sort_keys=True))
         
-    return data_parameter, model_parameter, training_parameter
+    return config_data
 
 def save_config(data_parameter, model_parameter, training_parameter, network):
     # writing config file into model folder
