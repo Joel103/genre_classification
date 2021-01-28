@@ -177,3 +177,6 @@ def get_waveform(x, noise_root, sample_rate):
     return {'noise_wav': audio,
             'noise_label': x['label'],
             'rate': sample_rate}
+
+def wrapper_dict2tensor(x, features=['mel','label']):
+    return [x[feature] for feature in features]

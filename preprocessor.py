@@ -156,6 +156,10 @@ class Preprocessor():
                                            db=0),
                     num_parallel_calls=AUTOTUNE)
         ds = ds.shuffle(buffer_size=self._config['shuffle_batch_size'])
+        
+        # extract tensors
+        ds = ds.map(lambda x: wrapper_dict2tensor(x, features=['mel','label']),
+                    num_parallel_calls=AUTOTUNE)
 
         
         if mode=='train':
