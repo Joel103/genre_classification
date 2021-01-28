@@ -15,16 +15,13 @@
 """
 from tensorflow import keras as keras
 from tensorflow.keras.models import model_from_json
-# TODO: import all other layers here
-from tensorflow.keras.layers import Input, Dense
-from tensorflow.keras.layers.experimental import preprocessing
-
 import tensorflow as tf
 import tensorflow.keras.backend as K
 
 import numpy as np
 import datetime
 import os
+import ae_model
 
 class Network():
     def __init__(self, *args, verbose=0, **kwargs):
@@ -34,12 +31,9 @@ class Network():
         
         # setting the precision to mixed if float16 is desired in training_parameter
         self._set_precision(self._training_parameter["calculation_dtype"], self._training_parameter["calculation_epsilon"])
-        
+
         # assemble network
         self._create_model()
-        self._add_input()
-        self._add_core()
-        self._add_output()
         
         if self._verbose:
             # print the model properties
@@ -57,8 +51,8 @@ class Network():
     def compile(self):
         # compile model
         self._model.compile(optimizer=self._optimizer,
-                          loss=self.loss,
-                          metrics=self.metrics)
+                          loss=self.loss(None, None),
+                          metrics=self.metrics(None, None))
         
     def save(self):
         #create model directory first
@@ -100,6 +94,9 @@ class Network():
     def predict_on_batch(self, *args, **kwargs):
         return self._model.predict_on_batch(*args, **kwargs)
     
+    def predict_embedding_on_batch(self, *args, **kwargs):
+        return self._encoder_only.predict_on_batch(*args, **kwargs)
+    
     @property
     def callbacks(self):
         return self._callbacks
@@ -130,48 +127,18 @@ class Network():
             mixed_precision.set_global_policy(policy)
             
     def _create_model(self):
+        ae_model.register_custom_objects()
+        #ae_model.get_custom_objects()
+        
         # initial definition of the sequential model
-        self._inner_model = keras.Sequential(name="dl4aed")
-            
-    def _add_input(self):
-        # for sequences (you could also add a "None" infront and get a sequence predictor)
-        self._inner_model.add(Input(shape=[*self._model_parameter["input_dimensions"]], dtype=self._training_parameter["calculation_dtype"]))
+        (self._encoder_input, self._encoder_only) = ae_model.create_encoder(self._model_parameter["encoder_input"], self._model_parameter["encoder"])
+        (self._decoder_input, self._decoder_only) = ae_model.create_decoder(self._model_parameter["decoder"], self._model_parameter["finalizer"], self._model_parameter["output"])
         
-        # TODO: think how to properly normalize the layer, depending on the input (rather do it after it was read and not augmented)
-        #norm_layer = preprocessing.Normalization()
-        #norm_layer.adapt(train_dataset.map(lambda x, _: x))
-        #self._model.add(norm_layer)
-        pass
-    
-    def _add_core(self):
-        self._inner_model.add(tf.keras.layers.Conv2D(16, (3, 3), activation="relu"))
-        self._inner_model.add(tf.keras.layers.MaxPool2D((2,2)))
-        self._inner_model.add(tf.keras.layers.Dropout(0.5))
-
-        self._inner_model.add(tf.keras.layers.Conv2D(64, (3, 3), activation="relu"))
-        self._inner_model.add(tf.keras.layers.GlobalMaxPool2D())
+        # combine networks
+        autoencoder_output = self._decoder_only(self._encoder_only(self._encoder_input))
+        autoencoder = tf.keras.Model(inputs=self._encoder_input, outputs=autoencoder_output, name="autoencoder")
+        self._model = autoencoder
         
-        self._inner_model.add(tf.keras.layers.Dense(self._model_parameter["embedding_dimensions"], activation="sigmoid"))
-        
-    def _add_output(self):
-        # Define the tensors for the two input images/sequences
-        left_input = tf.keras.Input(shape=[*self._model_parameter["input_dimensions"]], dtype=self._training_parameter["calculation_dtype"])
-        right_input = tf.keras.Input(shape=[*self._model_parameter["input_dimensions"]])
-
-        # Generate the encodings (feature vectors) for the two images
-        encoded_l = self._inner_model(left_input)
-        encoded_r = self._inner_model(right_input)
-
-        # Add a customized layer to compute the absolute difference between the encodings
-        L1_layer = tf.keras.layers.Lambda(lambda input_: tf.keras.backend.abs(input_[0] - input_[1]))
-        L1_distance = L1_layer([encoded_l, encoded_r])
-
-        # Add a dense layer with a sigmoid unit to generate the similarity score
-        prediction = Dense(self._model_parameter["output_dimensions"], activation='sigmoid')(L1_distance)
-
-        # Connect the inputs with the outputs
-        self._model = tf.keras.models.Model(inputs=[left_input, right_input], outputs=prediction)
-
     def _add_callbacks(self):
         from callbacks import IncreaseEpochCustom, SaveEveryNthEpochCustom
         self._callbacks += [IncreaseEpochCustom(self)]
@@ -193,7 +160,8 @@ class Network():
         if clip_gradient and self._training_parameter["optimizer_clip_parameter"] is not None \
                             and not is_half_precision and not is_distributed: 
             optimizer_clip_parameter = self._training_parameter["optimizer_clip_parameter"]
-        optimizer_config = { "class_name" : "adam", 
+            
+        optimizer_config = { "class_name" : self._training_parameter["optimizer_class_name"], 
                              "config" : { "learning_rate" : self._training_parameter["learning_rate"],
                                           **self._training_parameter["optimizer_parameter"],
                                           **optimizer_clip_parameter
@@ -204,11 +172,16 @@ class Network():
         
     def loss(self, y_true, y_pred):
         # calc mean over the batch dimension
-        return K.mean(self._calc_loss(y_true, y_pred), axis=0, keepdims=True)
+        #return K.mean(self._calc_loss(y_true, y_pred), axis=0, keepdims=True)
+        return "mae"
         
     def metrics(self, y_true, y_pred):
         # return <some metrics>
-        return []
+        metrics = []
+        metrics += ["mse"]
+        metrics += ["mae"]
+        metrics += [keras.metrics.RootMeanSquaredError()]
+        return metrics
     
     def _calc_loss(self, labels, predictions):
         #return <loss for each and every example>

@@ -1,8 +1,6 @@
 import tensorflow as tf
-import tensorflow_datasets as tfds
 import tensorflow_io as tfio
 from tensorflow import keras
-import tensorflow_probability as tfp 
 
 import os
 import math
@@ -11,6 +9,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import random
+
+import librosa
 
 #============================== PREPROCESSING ==============================
 
@@ -149,7 +149,7 @@ def wrapper_log_mel(x):
     
     return x
 
-def pitch_shift_data(wave_data, shift_val, bins_per_octave):
+def pitch_shift_data(wave_data, shift_val, bins_per_octave, sample_rate):
 
     wave_data = wave_data.numpy()
     random_shift = np.random.randint(low=-shift_val, high=shift_val)
@@ -157,8 +157,8 @@ def pitch_shift_data(wave_data, shift_val, bins_per_octave):
                                             random_shift, bins_per_octave=bins_per_octave)
     return wave_data
 
-def wrapper_change_pitch(x, shift_val, bins_per_octave):
-    out = tf.py_function(pitch_shift_data, [x['audio'], shift_val, bins_per_octave], tf.float32)
+def wrapper_change_pitch(x, shift_val, bins_per_octave, sample_rate):
+    out = tf.py_function(pitch_shift_data, [x['audio'], shift_val, bins_per_octave, sample_rate], tf.float32)
     x['audio'] = out
     return x
 
