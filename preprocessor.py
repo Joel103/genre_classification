@@ -126,15 +126,18 @@ class Preprocessor():
         # wav-level
         ds = ds.map(lambda x: wrapper_cast(x), num_parallel_calls=AUTOTUNE)
         ds = ds.map(lambda x: wrapper_cut_15(x), num_parallel_calls=AUTOTUNE)
-        ds = ds.map(lambda x: wrapper_change_pitch(x, self._config['shift_val'], self._config['bins_per_octave']),
+        ds = ds.map(lambda x: wrapper_change_pitch(x, self._config['shift_val'], self._config['bins_per_octave'], self._config['sample_rate']),
                     num_parallel_calls=AUTOTUNE)
         ds = ds.map(lambda x: wrapper_trim(x, self._config['epsilon']), num_parallel_calls=AUTOTUNE) # do we wanna trim?
         ds = ds.map(lambda x: wrapper_fade(x, self._config['fade']), num_parallel_calls=AUTOTUNE)
         ds = ds.map(lambda x: wrapper_pad_noise(x), num_parallel_calls=AUTOTUNE)
         ds = ds.map(lambda x: wrapper_mix_noise(x, SNR=self._config['SNR']), num_parallel_calls=AUTOTUNE)
         
+        ds = ds.map(lambda x: wrapper_normalize(x), num_parallel_calls=AUTOTUNE)
+        
         # extract noisy samples to hear
-        self.noisy_samples = ds.take(self._config['noisy_samples'])
+        if mode=='train':
+            self.noisy_samples = ds.take(self._config['noisy_samples'])
         
         # spect-level
         ds = ds.map(lambda x: wrapper_spect(x, self._config['nfft'], self._config['window'], self._config['stride']),
