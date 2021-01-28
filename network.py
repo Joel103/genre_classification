@@ -51,8 +51,8 @@ class Network():
     def compile(self):
         # compile model
         self._model.compile(optimizer=self._optimizer,
-                          loss=self.loss,
-                          metrics=self.metrics)
+                          loss=self.loss(None, None),
+                          metrics=self.metrics(None, None))
         
     def save(self):
         #create model directory first
@@ -161,7 +161,7 @@ class Network():
                             and not is_half_precision and not is_distributed: 
             optimizer_clip_parameter = self._training_parameter["optimizer_clip_parameter"]
             
-        optimizer_config = { "class_name" : self._training_parameter["optimizer"], 
+        optimizer_config = { "class_name" : self._training_parameter["optimizer_class_name"], 
                              "config" : { "learning_rate" : self._training_parameter["learning_rate"],
                                           **self._training_parameter["optimizer_parameter"],
                                           **optimizer_clip_parameter

@@ -11,21 +11,13 @@ import librosa
 import logging
 
 from prep_utils import *
+import tensorflow_probability as tfp
+import tensorflow_datasets as tfds
 
 tfd = tfp.distributions
 AUTOTUNE = tf.data.AUTOTUNE
 
 assert tf.__version__ == '2.4.0'
-
-'''
-TODO:
- * Wassim: train/val/test split of data (tfds.load --> split) 
- * Wassim: noise dataset under git version control (LFS)
- * Joel: video about melspectrogram
- * Nico: correct paths
- * All: MFCC needed?
- * All: Power of spectrogram before melscale?
-'''
 
 class Preprocessor():
     '''
@@ -45,13 +37,14 @@ class Preprocessor():
         self._config.update(update_dict)
         return self._config
     
-    def load_data(self, download=False):
+    def load_data(self, download=False, data_dir="tensorflow_datasets"):
         # tbd - data has to be downloaded first 
         self.dataset, self.ds_info = tfds.load(self._config['data_root'],
                                                with_info=True,
+                                               data_dir=data_dir,
                                                download=download,
                                                split=['train'])
-        self.dataset = self.dataset[0]
+        self.dataset = self.dataset[0].cache()
         
         meta = pd.read_csv(self._config['noise_path'], index_col='fname')
         labels = meta.label
@@ -72,7 +65,7 @@ class Preprocessor():
         self.noise_dataset = noise_ds2.map(lambda x: get_waveform(x,
                                                                   self._config['noise_root'],
                                                                   self._config['sample_rate']),
-                                           num_parallel_calls=AUTOTUNE)  
+                                           num_parallel_calls=AUTOTUNE).cache()
         
         if self.logger is not None:
             self.logger.info('dataset loaded')
@@ -112,8 +105,7 @@ class Preprocessor():
         # wav-level
         ds = ds.map(lambda x: wrapper_cast(x), num_parallel_calls=AUTOTUNE)
         ds = ds.map(lambda x: wrapper_cut_15(x), num_parallel_calls=AUTOTUNE)
-        ds = ds.map(lambda x: wrapper_change_pitch(x, self._config['shift_val'], self._config['bins_per_octave']),
-                    num_parallel_calls=AUTOTUNE)
+        #ds = ds.map(lambda x: wrapper_change_pitch(x, self._config['shift_val'], self._config['bins_per_octave'], self._config['sample_rate']), num_parallel_calls=AUTOTUNE)
         ds = ds.map(lambda x: wrapper_trim(x, self._config['epsilon']), num_parallel_calls=AUTOTUNE) # do we wanna trim?
         ds = ds.map(lambda x: wrapper_fade(x, self._config['fade']), num_parallel_calls=AUTOTUNE)
         ds = ds.map(lambda x: wrapper_pad_noise(x), num_parallel_calls=AUTOTUNE)
@@ -127,18 +119,19 @@ class Preprocessor():
                                           self._config['top_db'], db=0),
                     num_parallel_calls=AUTOTUNE) # Convert to mel-spectrogram
         ds = ds.map(lambda x: wrapper_log_mel(x), num_parallel_calls=AUTOTUNE)
-        ds = ds.map(lambda x: wrapper_mfcc(x), num_parallel_calls=AUTOTUNE)
-        ds = ds.map(lambda x: wrapper_roll(x, self._config['roll_val']),
-                    num_parallel_calls=AUTOTUNE) # do we wanna roll? (yes)
-        ds = ds.map(lambda x: wrapper_mask(x, self._config['freq_mask'],
-                                           self._config['time_mask'], self._config['param_db'],
-                                           db=0),
-                    num_parallel_calls=AUTOTUNE)
+        #ds = ds.map(lambda x: wrapper_mfcc(x), num_parallel_calls=AUTOTUNE)
+        #ds = ds.map(lambda x: wrapper_roll(x, self._config['roll_val']), num_parallel_calls=AUTOTUNE) # do we wanna roll? (yes)
+        ds = ds.map(lambda x: wrapper_mask(x, self._config['freq_mask'], self._config['time_mask'], \
+                                           self._config['param_db'], db=0), num_parallel_calls=AUTOTUNE)
         ds = ds.shuffle(buffer_size=self._config['shuffle_batch_size'])
         
-        self.dataset = ds
+        #self.dataset = ds
+        
+        ds = ds.map(lambda x: tf.expand_dims(x["mel"][:960], -1), num_parallel_calls=AUTOTUNE)
+        self.dataset = ds.map(lambda x: (x, x), num_parallel_calls=AUTOTUNE).batch(64)
         
         self.logger.info('done preprocessing and augmenting data')
     
-    def getter(self):
+    @property
+    def train_ds(self):
         return self.dataset
