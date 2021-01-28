@@ -188,6 +188,10 @@ class Preprocessor():
         ds = ds.map(lambda x: wrapper_log_mel(x), num_parallel_calls=AUTOTUNE)
         ds = ds.map(lambda x: wrapper_mfcc(x), num_parallel_calls=AUTOTUNE)
         
+        # extract tensors
+        ds = ds.map(lambda x: wrapper_dict2tensor(x, features=['mel','label']),
+                    num_parallel_calls=AUTOTUNE)
+        
         self.test_dataset = ds
         
         self.logger.info('done preprocessing and augmenting test data')
