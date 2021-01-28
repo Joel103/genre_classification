@@ -31,7 +31,7 @@ class Preprocessor():
         self.noise_dataset = None
         self.ready = False
         self.logger = None
-        
+        self.noisy_samples = None
         
     def get_config(self):
         return self._config
@@ -132,6 +132,10 @@ class Preprocessor():
         ds = ds.map(lambda x: wrapper_fade(x, self._config['fade']), num_parallel_calls=AUTOTUNE)
         ds = ds.map(lambda x: wrapper_pad_noise(x), num_parallel_calls=AUTOTUNE)
         ds = ds.map(lambda x: wrapper_mix_noise(x, SNR=self._config['SNR']), num_parallel_calls=AUTOTUNE)
+        
+        # extract noisy samples to hear
+        self.noisy_samples = ds.take(self._config['noisy_samples'])
+        
         # spect-level
         ds = ds.map(lambda x: wrapper_spect(x, self._config['nfft'], self._config['window'], self._config['stride']),
                     num_parallel_calls=AUTOTUNE)
