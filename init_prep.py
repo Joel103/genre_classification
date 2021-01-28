@@ -27,4 +27,8 @@ y.set_config({'fade': 10000,
               'top_db': 80,
               'shift_val': 3,
               'bins_per_octave': 12,
-              'param_db': 10})
+              'param_db': 10,
+              'train_size': 0.7,
+              'val_size': 0.2,
+              'test_size': 0.1,
+              'noisy_samples': 5})
