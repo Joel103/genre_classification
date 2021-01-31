@@ -6,20 +6,18 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import random
 
-
-
-
 import librosa
 
 import logging
 
 from prep_utils import *
+import tensorflow_probability as tfp
+import tensorflow_datasets as tfds
 
 tfd = tfp.distributions
 AUTOTUNE = tf.data.AUTOTUNE
 
 assert tf.__version__ == '2.4.0'
-
 
 class Preprocessor():
     '''
@@ -40,11 +38,12 @@ class Preprocessor():
         self._config.update(update_dict)
         return self._config
     
-    def load_data(self):
+    def load_data(self, download=False, data_dir="tensorflow_datasets"):
         # tbd - data has to be downloaded first 
         dataset, self.ds_info = tfds.load(self._config['data_root'],
                                                with_info=True,
-                                               download=False,
+                                               data_dir=data_dir,
+                                               download=download,
                                                split=['train'])
         dataset = dataset[0]
         dataset_size = dataset.cardinality().numpy()
@@ -79,7 +78,7 @@ class Preprocessor():
         self.noise_dataset = noise_ds2.map(lambda x: get_waveform(x,
                                                                   self._config['noise_root'],
                                                                   self._config['sample_rate']),
-                                           num_parallel_calls=AUTOTUNE)  
+                                           num_parallel_calls=AUTOTUNE).cache()
         
         if self.logger is not None:
             self.logger.info('dataset loaded')
@@ -148,13 +147,10 @@ class Preprocessor():
                                           self._config['top_db'], db=0),
                     num_parallel_calls=AUTOTUNE) # Convert to mel-spectrogram
         ds = ds.map(lambda x: wrapper_log_mel(x), num_parallel_calls=AUTOTUNE)
-        ds = ds.map(lambda x: wrapper_mfcc(x), num_parallel_calls=AUTOTUNE)
-        ds = ds.map(lambda x: wrapper_roll(x, self._config['roll_val']),
-                    num_parallel_calls=AUTOTUNE) # do we wanna roll? (yes)
-        ds = ds.map(lambda x: wrapper_mask(x, self._config['freq_mask'],
-                                           self._config['time_mask'], self._config['param_db'],
-                                           db=0),
-                    num_parallel_calls=AUTOTUNE)
+        #ds = ds.map(lambda x: wrapper_mfcc(x), num_parallel_calls=AUTOTUNE)
+        #ds = ds.map(lambda x: wrapper_roll(x, self._config['roll_val']), num_parallel_calls=AUTOTUNE) # do we wanna roll? (yes)
+        ds = ds.map(lambda x: wrapper_mask(x, self._config['freq_mask'], self._config['time_mask'], \
+                                           self._config['param_db'], db=0), num_parallel_calls=AUTOTUNE)
         ds = ds.shuffle(buffer_size=self._config['shuffle_batch_size'])
         
         # extract tensors
@@ -197,10 +193,8 @@ class Preprocessor():
         self.logger.info('done preprocessing and augmenting test data')
     
         
-
-
-        
-        
-        
-        
-       
+        self.logger.info('done preprocessing and augmenting data')
+    
+    @property
+    def train_ds(self):
+        return self.dataset

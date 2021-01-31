@@ -10,5 +10,6 @@ tensorflow-serving-api
 tf-agents
 transformers
 pydub
-wandb==0.10.14
+wandb==0.10.15
 soundfile
+plotly
