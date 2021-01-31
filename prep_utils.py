@@ -15,12 +15,15 @@ import librosa
 #============================== PREPROCESSING ==============================
 
 def wrapper_cast(x):
-    x['audio'] = tf.cast(x['audio'], tf.float32)# / 32768.0
-    x['noise_wav'] = tf.cast(x['noise_wav'], tf.float32)# / 32768.0
+    x['audio'] = tf.cast(x['audio'], tf.float32)
+    try:
+        x['noise_wav'] = tf.cast(x['noise_wav'], tf.float32)
+    except KeyError:
+        x['input'] = x['audio']
     return x
 
-def wrapper_cast_label(x):
-    x['label'] = tf.cast(x['label'], tf.int64)
+def wrapper_normalize(x):
+    x['input'] = x['input'] / tf.math.reduce_max(x['input'], axis=0, keepdims=True, name=None)
     return x
 
 def wrapper_spect(x, nfft, window, stride, light=True):
@@ -154,7 +157,7 @@ def pitch_shift_data(wave_data, shift_val, bins_per_octave, sample_rate):
     wave_data = wave_data.numpy()
     random_shift = np.random.randint(low=-shift_val, high=shift_val)
     wave_data = librosa.effects.pitch_shift(wave_data, sample_rate, 
-                                            random_shift, bins_per_octave=bins_per_octave)
+                                            random_shift, bins_per_octave=bins_per_octave.numpy())
     return wave_data
 
 def wrapper_change_pitch(x, shift_val, bins_per_octave, sample_rate):
@@ -172,3 +175,6 @@ def get_waveform(x, noise_root, sample_rate):
     return {'noise_wav': audio,
             'noise_label': x['label'],
             'rate': sample_rate}
+
+def wrapper_dict2tensor(x, features=['mel','label']):
+    return [x[feature] for feature in features]

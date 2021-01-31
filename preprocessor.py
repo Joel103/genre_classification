@@ -29,6 +29,7 @@ class Preprocessor():
         self.noise_dataset = None
         self.ready = False
         self.logger = None
+        self.noisy_samples = None
         
     def get_config(self):
         return self._config
@@ -39,12 +40,24 @@ class Preprocessor():
     
     def load_data(self, download=False, data_dir="tensorflow_datasets"):
         # tbd - data has to be downloaded first 
-        self.dataset, self.ds_info = tfds.load(self._config['data_root'],
+        dataset, self.ds_info = tfds.load(self._config['data_root'],
                                                with_info=True,
                                                data_dir=data_dir,
                                                download=download,
                                                split=['train'])
-        self.dataset = self.dataset[0].cache()
+        dataset = dataset[0]
+        dataset_size = dataset.cardinality().numpy()
+        train_size = int(self._config['train_size'] * dataset_size)
+        val_size = int(self._config['val_size'] * dataset_size)
+        test_size = int(self._config['test_size'] * dataset_size)
+        
+        # split data
+        dataset = dataset.shuffle(dataset_size) # is it smart to do it this way?
+        self.train_dataset = dataset.take(train_size)
+        self.test_dataset = dataset.skip(train_size)
+        self.val_dataset = self.test_dataset.skip(val_size)
+        self.test_dataset = self.test_dataset.take(test_size)
+
         
         meta = pd.read_csv(self._config['noise_path'], index_col='fname')
         labels = meta.label
@@ -54,7 +67,7 @@ class Preprocessor():
                          'Bark', 'Laughter', 'Drawer_open_or_close']
         noise_data = meta.loc[meta['label'].isin(noise_classes)].index.values
         random.shuffle(noise_data)
-        size = self.dataset.cardinality()
+        size = self.train_dataset.cardinality()
         extended_noise = noise_data
         while len(extended_noise) < size:
             extended_noise = np.concatenate([extended_noise, noise_data])
@@ -90,26 +103,41 @@ class Preprocessor():
         
         return self.logger
     
-    def launch_pipeline(self, extract_noise_wav=False):
-        assert self.dataset is not None
+    def launch_trainval_pipeline(self, extract_noise_wav=False, mode='train'):
+        assert self.train_dataset is not None
         assert self.noise_dataset is not None
         assert self.logger is not None
         
-        self.logger.info('started preprocessing and augmenting data')
+        self.logger.info(f'started preprocessing and augmenting {mode} data')
+        
+        if mode=='train':
+            ds = self.train_dataset
+        elif mode=='val':
+            ds = self.val_dataset
+        else:
+            raise Excpetion('wrong pipeline. For test pipeline, call launch_test_pipeline.')
         
         # zip noise dataset
-        ds = tf.data.Dataset.zip((self.dataset, self.noise_dataset))
+        ds = tf.data.Dataset.zip((ds, self.noise_dataset))
         # merge features into one featureDict
         ds = ds.map(lambda x, y: wrapper_merge_features(x, y), num_parallel_calls=AUTOTUNE)
 
         # wav-level
         ds = ds.map(lambda x: wrapper_cast(x), num_parallel_calls=AUTOTUNE)
         ds = ds.map(lambda x: wrapper_cut_15(x), num_parallel_calls=AUTOTUNE)
-        #ds = ds.map(lambda x: wrapper_change_pitch(x, self._config['shift_val'], self._config['bins_per_octave'], self._config['sample_rate']), num_parallel_calls=AUTOTUNE)
+        ds = ds.map(lambda x: wrapper_change_pitch(x, self._config['shift_val'], self._config['bins_per_octave'], self._config['sample_rate']),
+                    num_parallel_calls=AUTOTUNE)
         ds = ds.map(lambda x: wrapper_trim(x, self._config['epsilon']), num_parallel_calls=AUTOTUNE) # do we wanna trim?
         ds = ds.map(lambda x: wrapper_fade(x, self._config['fade']), num_parallel_calls=AUTOTUNE)
         ds = ds.map(lambda x: wrapper_pad_noise(x), num_parallel_calls=AUTOTUNE)
         ds = ds.map(lambda x: wrapper_mix_noise(x, SNR=self._config['SNR']), num_parallel_calls=AUTOTUNE)
+        
+        ds = ds.map(lambda x: wrapper_normalize(x), num_parallel_calls=AUTOTUNE)
+        
+        # extract noisy samples to hear
+        if mode=='train':
+            self.noisy_samples = ds.take(self._config['noisy_samples'])
+        
         # spect-level
         ds = ds.map(lambda x: wrapper_spect(x, self._config['nfft'], self._config['window'], self._config['stride']),
                     num_parallel_calls=AUTOTUNE)
@@ -125,10 +153,45 @@ class Preprocessor():
                                            self._config['param_db'], db=0), num_parallel_calls=AUTOTUNE)
         ds = ds.shuffle(buffer_size=self._config['shuffle_batch_size'])
         
-        #self.dataset = ds
+        # extract tensors
+        ds = ds.map(lambda x: wrapper_dict2tensor(x, features=['mel','label']),
+                    num_parallel_calls=AUTOTUNE)
+
         
-        ds = ds.map(lambda x: tf.expand_dims(x["mel"][:960], -1), num_parallel_calls=AUTOTUNE)
-        self.dataset = ds.map(lambda x: (x, x), num_parallel_calls=AUTOTUNE).batch(64)
+        if mode=='train':
+            self.train_dataset = ds
+        elif mode=='val':
+            self.val_dataset = ds
+        
+        self.logger.info(f'done preprocessing and augmenting {mode} data')
+
+
+    def launch_test_pipeline(self, extract_noise_wav=False):
+        
+        self.logger.info('started preprocessing and augmenting test data')
+        
+        ds = self.test_dataset
+        
+        ds = ds.map(lambda x: wrapper_cast(x), num_parallel_calls=AUTOTUNE)
+        ds = ds.map(lambda x: wrapper_cut_15(x), num_parallel_calls=AUTOTUNE)
+        ds = ds.map(lambda x: wrapper_spect(x, self._config['nfft'], self._config['window'], self._config['stride']),
+                    num_parallel_calls=AUTOTUNE)
+        ds = ds.map(lambda x: wrapper_mel(x,
+                                          self._config['sample_rate'], self._config['mels'],
+                                          self._config['fmin_mels'], self._config['fmax_mels'],
+                                          self._config['top_db'], db=0),
+                    num_parallel_calls=AUTOTUNE) # Convert to mel-spectrogram
+        ds = ds.map(lambda x: wrapper_log_mel(x), num_parallel_calls=AUTOTUNE)
+        ds = ds.map(lambda x: wrapper_mfcc(x), num_parallel_calls=AUTOTUNE)
+        
+        # extract tensors
+        ds = ds.map(lambda x: wrapper_dict2tensor(x, features=['mel','label']),
+                    num_parallel_calls=AUTOTUNE)
+        
+        self.test_dataset = ds
+        
+        self.logger.info('done preprocessing and augmenting test data')
+    
         
         self.logger.info('done preprocessing and augmenting data')
     
