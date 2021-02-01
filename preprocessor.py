@@ -6,18 +6,16 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import random
 
-import librosa
-
 import logging
 
 from prep_utils import *
-import tensorflow_probability as tfp
+from utils import wrapper_serialize, save_dataset, load_dataset
+
 import tensorflow_datasets as tfds
 
-tfd = tfp.distributions
 AUTOTUNE = tf.data.AUTOTUNE
 
-assert tf.__version__ == '2.4.0'
+assert tf.__version__ >= '2.4.0'
 
 class Preprocessor():
     '''
@@ -30,6 +28,10 @@ class Preprocessor():
         self.ready = False
         self.logger = None
         self.noisy_samples = None
+        
+        self.train_dataset = None
+        self.val_dataset = None
+        self.test_dataset = None
         
     def get_config(self):
         return self._config
@@ -66,19 +68,20 @@ class Preprocessor():
                          'Keys_jangling', 'Knock', 'Microwave_oven', 'Finger_snapping',
                          'Bark', 'Laughter', 'Drawer_open_or_close']
         noise_data = meta.loc[meta['label'].isin(noise_classes)].index.values
+        '''
         random.shuffle(noise_data)
         size = self.train_dataset.cardinality()
         extended_noise = noise_data
         while len(extended_noise) < size:
             extended_noise = np.concatenate([extended_noise, noise_data])
-            
-        noise_ds2 = tf.data.Dataset.from_tensor_slices({'noise': extended_noise,
-                                                        'label': [0]*len(extended_noise)})
+        '''
+        noise_ds2 = tf.data.Dataset.from_tensor_slices({'noise': noise_data,
+                                                        'label': [0]*len(noise_data)})
 
         self.noise_dataset = noise_ds2.map(lambda x: get_waveform(x,
                                                                   self._config['noise_root'],
                                                                   self._config['sample_rate']),
-                                           num_parallel_calls=AUTOTUNE).cache()
+                                           num_parallel_calls=AUTOTUNE)
         
         if self.logger is not None:
             self.logger.info('dataset loaded')
@@ -147,8 +150,7 @@ class Preprocessor():
                                           self._config['top_db'], db=0),
                     num_parallel_calls=AUTOTUNE) # Convert to mel-spectrogram
         ds = ds.map(lambda x: wrapper_log_mel(x), num_parallel_calls=AUTOTUNE)
-        #ds = ds.map(lambda x: wrapper_mfcc(x), num_parallel_calls=AUTOTUNE)
-        #ds = ds.map(lambda x: wrapper_roll(x, self._config['roll_val']), num_parallel_calls=AUTOTUNE) # do we wanna roll? (yes)
+        ds = ds.map(lambda x: wrapper_roll(x, self._config['roll_val']), num_parallel_calls=AUTOTUNE) # do we wanna roll? (yes)
         ds = ds.map(lambda x: wrapper_mask(x, self._config['freq_mask'], self._config['time_mask'], \
                                            self._config['param_db'], db=0), num_parallel_calls=AUTOTUNE)
         ds = ds.shuffle(buffer_size=self._config['shuffle_batch_size'])
@@ -182,7 +184,6 @@ class Preprocessor():
                                           self._config['top_db'], db=0),
                     num_parallel_calls=AUTOTUNE) # Convert to mel-spectrogram
         ds = ds.map(lambda x: wrapper_log_mel(x), num_parallel_calls=AUTOTUNE)
-        ds = ds.map(lambda x: wrapper_mfcc(x), num_parallel_calls=AUTOTUNE)
         
         # extract tensors
         ds = ds.map(lambda x: wrapper_dict2tensor(x, features=['mel','label']),
@@ -191,10 +192,112 @@ class Preprocessor():
         self.test_dataset = ds
         
         self.logger.info('done preprocessing and augmenting test data')
-    
+        
+    def offline_preprocessing(self, mode=False):
+        '''
+        create spectrograms to spare processing time due to fourier transforms
+        mode in self.available_modi (['noise', 'train', 'val', 'test'])
+        '''
+        if mode=='noise':
+            ds = self.noise_dataset
+            # wav-level
+            ds = ds.map(lambda x: wrapper_cast_offline(x, noise=True), num_parallel_calls=AUTOTUNE)
+            ds = ds.map(lambda x: wrapper_rescale(x), num_parallel_calls=AUTOTUNE)
+            # spect-level
+            ds = ds.map(lambda x: wrapper_spect(x,
+                                                self._config['nfft'],
+                                                self._config['window'],
+                                                self._config['stride'],
+                                                self.logger),
+                        num_parallel_calls=AUTOTUNE)
+            ds = ds.map(lambda x: wrapper_mel(x,
+                                              self._config['sample_rate'], self._config['mels'],
+                                              self._config['fmin_mels'], self._config['fmax_mels'],
+                                              self._config['top_db'], db=0, logger=self.logger),
+                        num_parallel_calls=AUTOTUNE) # Convert to mel-spectrogram
+            ds = ds.map(lambda x: wrapper_log_mel(x), num_parallel_calls=AUTOTUNE)
+            ds = ds.map(lambda x: wrapper_normalize(x), num_parallel_calls=AUTOTUNE)
+
+            self.noise_dataset = ds
+        
+        elif mode=='test':
+            ds = self.test_dataset
+            
+            ds = ds.map(lambda x: wrapper_cast_offline(x), num_parallel_calls=AUTOTUNE)
+            ds = ds.map(lambda x: wrapper_cut_15(x), num_parallel_calls=AUTOTUNE)
+            ds = ds.map(lambda x: wrapper_rescale(x), num_parallel_calls=AUTOTUNE)
+            ds = ds.map(lambda x: wrapper_spect(x, self._config['nfft'], self._config['window'], self._config['stride'], logger=self.logger),
+                        num_parallel_calls=AUTOTUNE)
+            ds = ds.map(lambda x: wrapper_mel(x,
+                                              self._config['sample_rate'], self._config['mels'],
+                                              self._config['fmin_mels'], self._config['fmax_mels'],
+                                              self._config['top_db'], db=0, logger=self.logger),
+                        num_parallel_calls=AUTOTUNE) # Convert to mel-spectrogram
+            ds = ds.map(lambda x: wrapper_log_mel(x), num_parallel_calls=AUTOTUNE)
+            ds = ds.map(lambda x: wrapper_normalize(x), num_parallel_calls=AUTOTUNE)
+
+            self.test_dataset = ds
+        
+        else:
+            if mode=='train':
+                ds = self.train_dataset
+            else:
+                ds = self.val_dataset
+            
+            # wav-level
+            ds = ds.map(lambda x: wrapper_cast_offline(x), num_parallel_calls=AUTOTUNE)
+            ds = ds.map(lambda x: wrapper_cut_15(x), num_parallel_calls=AUTOTUNE)
+            ds = ds.map(lambda x: wrapper_rescale(x), num_parallel_calls=AUTOTUNE)
+            # no trim and no pitch shift
+            ds = ds.map(lambda x: wrapper_fade(x, self._config['fade']), num_parallel_calls=AUTOTUNE)
+            
+            # spect-level
+            ds = ds.map(lambda x: wrapper_spect(x, self._config['nfft'], self._config['window'], self._config['stride']),
+                        num_parallel_calls=AUTOTUNE)
+            ds = ds.map(lambda x: wrapper_mel(x,
+                                              self._config['sample_rate'], self._config['mels'],
+                                              self._config['fmin_mels'], self._config['fmax_mels'],
+                                              self._config['top_db'], db=0),
+                        num_parallel_calls=AUTOTUNE) # Convert to mel-spectrogram
+            ds = ds.map(lambda x: wrapper_log_mel(x), num_parallel_calls=AUTOTUNE)
+            ds = ds.map(lambda x: wrapper_normalize(x), num_parallel_calls=AUTOTUNE)
+
+            if mode=='train':
+                self.train_dataset = ds
+            else:
+                self.val_dataset = ds
+
         
         self.logger.info('done preprocessing and augmenting data')
     
+    def save_mels(self, skip=[]):
+        for mode, ds in zip(self.available_modi, [self.train_dataset, self.val_dataset, self.noise_dataset, self.test_dataset]):
+            if mode in skip:
+                continue
+            mels_ds = ds.map(lambda x: wrapper_dict2tensor(x, ['mel']))
+            
+            if mode=='noise':
+                labels_ds = ds.map(lambda x: wrapper_dict2tensor(x, ['noise_label']))
+            else:
+                labels_ds = ds.map(lambda x: wrapper_dict2tensor(x, ['label']))
+
+            _ = save_dataset(mels_ds, f'./{mode}/mels.record')
+            _ = save_dataset(labels_ds, f'./{mode}/labels.record')
+            
+            self.logger.info(f'done saving data for {mode}')
+        
+    @property
+    def available_modi(self):
+        return ['train', 'val', 'noise', 'test']
+    
     @property
     def train_ds(self):
-        return self.dataset
+        return self.train_dataset
+    
+    @property
+    def val_ds(self):
+        return self.val_dataset
+    
+    @property
+    def test_ds(self):
+        return self.test_dataset

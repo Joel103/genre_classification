@@ -1,3 +1,7 @@
+import tensorflow as tf
+import os
+
+
 # load model config
 def load_config(config_path="config.json", verbose=1):
     import json
@@ -40,3 +44,22 @@ def update(d, u):
         else:
             d[k] = v
     return d
+
+def wrapper_serialize(x):
+    return tf.py_function(tf.io.serialize_tensor, [x],
+                          [tf.string])[0]
+
+def save_dataset(ds, path):
+    ds = ds.map(lambda x: wrapper_serialize(x))
+    writer = tf.data.experimental.TFRecordWriter(path)
+    try:
+        writer.write(ds) 
+    except tf.errors.NotFoundError:
+        os.makedirs(os.path.dirname(path))
+        writer.write(ds)
+    return True
+    
+def load_dataset(path, dtype=tf.float32):
+    ds_new = tf.data.TFRecordDataset(path)
+    ds_new = ds_new.map(lambda x: tf.io.parse_tensor(x, dtype))
+    return ds_new

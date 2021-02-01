@@ -12,6 +12,8 @@ import random
 
 import librosa
 
+import time
+
 #============================== PREPROCESSING ==============================
 
 def wrapper_cast(x):
@@ -22,24 +24,39 @@ def wrapper_cast(x):
         x['input'] = x['audio']
     return x
 
-def wrapper_normalize(x):
-    x['input'] = x['input'] / tf.math.reduce_max(x['input'], axis=0, keepdims=True, name=None)
+def wrapper_cast_offline(x, noise=False):
+    if noise:
+        x['input'] = tf.cast(x['noise_wav'], tf.float32)
+    else:
+        x['input'] = tf.cast(x['audio'], tf.float32)
     return x
 
-def wrapper_spect(x, nfft, window, stride, light=True):
+def wrapper_normalize(x):
+    # normalize whole sample in a range between 0 and 1
+    x['mel'] -= tf.math.reduce_min(x['mel'])
+    x['mel'] /= tf.math.reduce_max(x['mel'])
+    return x
+
+def wrapper_rescale(x):
+    # normalize whole sample in a range between 0 and 1
+    x['input'] /= tf.math.reduce_max(x['input'])
+    return x
+
+def wrapper_spect(x, nfft, window, stride, logger=None):
+    
+    start_time = time.time()
     x['spectrogram'] = tfio.experimental.audio.spectrogram(x['input'],
                                                            nfft=nfft,
                                                            window=window,
                                                            stride=stride)
-#     x['spectrogram_sq'] = tfio.experimental.audio.spectrogram(x['input'],
-#                                                            nfft=config['nfft'],
-#                                                            window=config['window'],
-#                                                            stride=config['stride'],
-#                                                            magnitude_squared=True)
+    if logger is not None:
+        logger.info(f'computing spectrogram took {np.round(time.time() - start_time, 2)} s')
+
     x.pop('input')
     return x
 
-def wrapper_mel(x, sample_rate, mels, fmin_mels, fmax_mels, top_db, db=False, light=True):
+def wrapper_mel(x, sample_rate, mels, fmin_mels, fmax_mels, top_db, db=False, light=True, logger=None):
+    start_time = time.time()
     x['mel'] = tfio.experimental.audio.melscale(x['spectrogram'],
                                                 rate=sample_rate,
                                                 mels=mels,
@@ -47,25 +64,27 @@ def wrapper_mel(x, sample_rate, mels, fmin_mels, fmax_mels, top_db, db=False, li
                                                 fmax=fmax_mels)
     if db: #to be implemented with noise
         x['db_mel'] = tfio.experimental.audio.dbscale(x['mel'], top_db=top_db)
+        
+    if logger is not None:
+        logger.info(f'computing mel-spectrogram took {np.round(time.time() - start_time, 2)} s')
     
     x.pop('spectrogram')
     return x
 
 def cut_15(signal):
-#     start = tfd.Categorical([1]*661000).sample(int(1))
     start = np.random.randint(0, int(len(signal)/2))
     signal = signal[start:start+int(len(signal)/2)]
     return signal
 
 def wrapper_cut_15(x):
-    out = tf.py_function(cut_15, [x['audio']], [tf.float32])
-    x['audio'] = tf.squeeze(out)
+    out = tf.py_function(cut_15, [x['input']], [tf.float32])
+    x['input'] = tf.squeeze(out)
     return x
 
 #============================== AUGMENTATION ==============================
 
 def wrapper_fade(x, fade):
-    x['audio'] = tfio.experimental.audio.fade(x['audio'], fade_in=fade, fade_out=fade, mode="logarithmic")
+    x['input'] = tfio.experimental.audio.fade(x['input'], fade_in=fade, fade_out=fade, mode="logarithmic")
     return x
 
 def wrapper_trim(x, epsilon):
@@ -177,4 +196,12 @@ def get_waveform(x, noise_root, sample_rate):
             'rate': sample_rate}
 
 def wrapper_dict2tensor(x, features=['mel','label']):
-    return [x[feature] for feature in features]
+    return [tf.convert_to_tensor(x[feature]) for feature in features]
+
+def wrapper_serialize(x):
+    print(x)
+    return tf.py_function(tf.io.serialize_tensor, [x],
+                          [tf.string])[0]
+
+def wrapper_p(x):
+    return tf.py_function(tf.io.parse_tensor, [x, tf.float32], [tf.float32])
