@@ -264,6 +264,9 @@ class Preprocessor():
                 self.train_dataset = ds
             else:
                 self.val_dataset = ds
+
+        
+        self.logger.info('done preprocessing and augmenting data')
     
     def save_mels(self, skip=[]):
         for mode, ds in zip(['train', 'val', 'noise', 'test'], [self.train_dataset, self.val_dataset, self.noise_dataset, self.test_dataset]):
@@ -285,13 +288,6 @@ class Preprocessor():
             
     
     
-            
-
-            
-        
-    
-        
-        self.logger.info('done preprocessing and augmenting data')
     
     @property
     def train_ds(self):
