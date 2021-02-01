@@ -1,6 +1,6 @@
 argparse
 sklearn
-tensorflow==2.4.0
+tensorflow==2.4.1
 tensorflow-io
 tensorflow-datasets
 pydub

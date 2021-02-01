@@ -33,7 +33,12 @@ def wrapper_cast_offline(x, noise=False):
 
 def wrapper_normalize(x):
     # normalize whole sample in a range between 0 and 1
-    x['input'] -= tf.math.reduce_min(x['input'])
+    x['mel'] -= tf.math.reduce_min(x['mel'])
+    x['mel'] /= tf.math.reduce_max(x['mel'])
+    return x
+
+def wrapper_rescale(x):
+    # normalize whole sample in a range between 0 and 1
     x['input'] /= tf.math.reduce_max(x['input'])
     return x
 
