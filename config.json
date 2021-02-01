@@ -6,9 +6,7 @@
 
     "model_parameter":
     {
-        "input_dimensions": [64, 63, 1],
-        "embedding_dimensions": 4096,
-        "output_dimensions": 1
+        
     },
 
     "training_parameter":

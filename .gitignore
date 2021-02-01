@@ -1,4 +1,6 @@
+wandb
 _data
 .ipynb_checkpoints
 __pycache__
 main.py
+*.log

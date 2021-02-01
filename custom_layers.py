@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras.layers import Reshape, Lambda, MaxPool2D, UpSampling2D, LeakyReLU, ReLU
+from tensorflow.keras.layers import Reshape, Lambda, MaxPool2D, UpSampling2D, LeakyReLU, ReLU, Cropping2D
 from tensorflow.keras.layers import Conv2D, Conv2DTranspose
 from tensorflow.keras.layers import BatchNormalization, SpatialDropout2D, Dropout
 from tensorflow.keras.layers.experimental import preprocessing
@@ -173,3 +173,50 @@ class BuildingBlock(tf.keras.layers.Layer):
     
     def get_config(self):
         return {"layers": self.layers_config}
+    
+
+class Finalizer(tf.keras.layers.Layer):
+    def __init__(self, paper_like_example, **kwargs):
+        super().__init__(**kwargs)
+        
+        self.layers = []
+        if paper_like_example:
+            self.layers += [
+                Conv2DRescaleBlock(conv2dblock={"num_filters":16, "pool":False, "spatial_dropout":True}, \
+                                   rescale_height=58, rescale_width=58),
+                Conv2DRescaleBlock(conv2dblock={"num_filters":1, "pool":False, "use_dropout":False}, \
+                                     rescale_height=66, rescale_width=66)
+            ]
+        else:
+            self.layers += [
+                Conv2DTransposeBlock(num_filters=16, use_dropout=False),
+                Conv2DTransposeBlock(num_filters=1, use_dropout=False),
+                preprocessing.Resizing(70, 70, interpolation='bilinear'),
+                Cropping2D(cropping=((3, 3), (3, 3))),
+            ]
+        self.layers += [
+            #Lambda(lambda x: tf.keras.activations.sigmoid(x)),
+            #LeakyReLU(),
+        ]
+        
+    def call(self, x):
+        for _layer in self.layers:
+            x = _layer(x)
+        return x
+
+    def compute_output_shape(self, input_shape):
+        output_shape = input_shape
+        for _layer in self.layers:
+            if isinstance(_layer, tf.keras.layers.InputLayer):
+                output_shape = _layer._batch_input_shape
+            else:
+                output_shape = _layer.compute_output_shape(output_shape)
+        return output_shape
+
+    # TODO: the following 2 methods
+    def get_config(self):
+        return {}
+    
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
