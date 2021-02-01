@@ -32,7 +32,9 @@ def wrapper_cast_offline(x, noise=False):
     return x
 
 def wrapper_normalize(x):
-    x['input'] = x['input'] / tf.math.reduce_max(x['input'], axis=0, keepdims=True, name=None)
+    # normalize whole sample in a range between 0 and 1
+    x['input'] -= tf.math.reduce_min(x['input'])
+    x['input'] /= tf.math.reduce_max(x['input'])
     return x
 
 def wrapper_spect(x, nfft, window, stride, logger=None):

@@ -6,20 +6,16 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import random
 
-import librosa
-
 import logging
 
 from prep_utils import *
 from utils import wrapper_serialize, save_dataset, load_dataset
 
-import tensorflow_probability as tfp
 import tensorflow_datasets as tfds
 
-tfd = tfp.distributions
 AUTOTUNE = tf.data.AUTOTUNE
 
-assert tf.__version__ == '2.4.0'
+assert tf.__version__ >= '2.4.0'
 
 class Preprocessor():
     '''
