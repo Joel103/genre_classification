@@ -24,10 +24,10 @@ def wrapper_cast(x):
         x['input'] = x['audio']
     return x
 
-def wrapper_cast_offline(x, noise=False):
-    if noise:
+def wrapper_cast_offline(x):
+    try:
         x['input'] = tf.cast(x['noise_wav'], tf.float32)
-    else:
+    except KeyError:
         x['input'] = tf.cast(x['audio'], tf.float32)
     return x
 
@@ -70,7 +70,7 @@ def wrapper_mel(x, sample_rate, mels, fmin_mels, fmax_mels, top_db, db=False, li
     
     x.pop('spectrogram')
     return x
-
+'''
 def cut_15(signal):
     start = np.random.randint(0, int(len(signal)/2))
     signal = signal[start:start+int(len(signal)/2)]
@@ -80,7 +80,7 @@ def wrapper_cut_15(x):
     out = tf.py_function(cut_15, [x['input']], [tf.float32])
     x['input'] = tf.squeeze(out)
     return x
-
+'''
 #============================== AUGMENTATION ==============================
 
 def wrapper_fade(x, fade):
@@ -105,71 +105,85 @@ def wrapper_mask(x, freq_mask, time_mask, param_db, db=False):
         x['db_mel'] = tfio.experimental.audio.freq_mask(x['db_mel'], param=param_db)
         x['db_mel'] = tfio.experimental.audio.time_mask(x['db_mel'], param=param_db)
     return x
-    
-    
 
 def wrapper_roll(x, roll_val):
-    x['mel'] = tf.roll(x['mel'], 
-                       tf.random.uniform((), minval=-roll_val, maxval=roll_val, dtype=tf.dtypes.int32),
-                       axis=1)
-    return x
-    
-
-
-def pad_noise(signal, noise):
-    if len(signal)>len(noise):
-        _, noise = tf.keras.preprocessing.sequence.pad_sequences([signal[:int(len(signal)/4)], noise],
-                                                                  maxlen=None,
-                                                                  dtype='float32',
-                                                                  padding='pre',
-                                                                  truncating='pre',
-                                                                  value=0.0)
-    signal, noise = tf.keras.preprocessing.sequence.pad_sequences([signal, noise],
-                                                                  maxlen=None,
-                                                                  dtype='float32',
-                                                                  padding='post',
-                                                                  truncating='pre',
-                                                                  value=0.0)
-    return [signal, noise]
-
-def wrapper_pad_noise(x):
-    out = tf.py_function(pad_noise, [x['audio'], x['noise_wav']], [tf.float32, tf.float32])
-    x['audio'], x['noise_wav'] = out
+    roll_tensor = tf.random.uniform((), minval=-roll_val, maxval=roll_val, dtype=tf.dtypes.int32)
+    x['mel'] = tf.roll(x['mel'], roll_tensor, axis=0)
+    x['mel_noise'] = tf.roll(x['mel_noise'], roll_tensor, axis=0)
     return x
 
-def get_noise_from_sound(signal,noise,SNR):
-    RMS_s=math.sqrt(np.mean(signal**2))
-    #required RMS of noise
-    RMS_n=math.sqrt(RMS_s**2/(pow(10,SNR/10)))
+def get_noise_from_sound(signal, noise, SNR):
+    # current RMS of signal
+    centered_signal = signal-tf.reduce_mean(signal)
+    RMS_s = tf.sqrt(tf.reduce_mean(tf.square(centered_signal)))
     
-    #current RMS of noise
-    RMS_n_current=math.sqrt(np.mean(noise**2))
-    noise=noise*(RMS_n/RMS_n_current)
+    # current RMS of noise
+    centered_noise = noise-tf.reduce_mean(noise)
+    RMS_n_current = tf.sqrt(tf.reduce_mean(tf.square(centered_noise)))
     
+    # scalar
+    RMS_n = SNR * (RMS_s / RMS_n_current)
+    
+    noise /= RMS_n
     return noise
 
 def wrapper_mix_noise(x, SNR):
-    out = tf.py_function(get_noise_from_sound,
-                         [x['audio'], x['noise_wav'], SNR],
-                         [tf.float32])
-    x['input'] = tf.squeeze(out)+x['audio']
-    x.pop('audio')
-    x.pop('noise_wav')
+    out = get_noise_from_sound(x['mel'], x['mel_noise'], SNR)
+    x['mel'] += tf.squeeze(out)
     return x
 
-def wrapper_merge_features(ds1, ds2):
-    ds1.update(ds2)
-    return ds1
+def wrapper_merge_features(ds, ds_noise):
+    ds.update({"mel_noise": ds_noise["mel"], "label_noise": ds_noise["label"], "shape_noise": ds_noise["shape"]})
+    return ds
 
-def wrapper_mfcc(x):
-    x['mfcc'] = tf.signal.mfccs_from_log_mel_spectrograms(x['mel'])
+def wrapper_shape_to_proper_length(x, common_divider, clip=True, testing=False):
+    # TODO: adapt to be dynamic about how long either signal or noise is (current assumption is: signal_length >= noise_length)
     
+    # get shapes
+    signal_shape = x['shape']
+    if clip:
+        pad_length = signal_shape[0] - tf.math.mod(signal_shape[0], common_divider)
+        x["mel"] = x["mel"][:pad_length]
+    else:
+        # calc desired sequence length
+        pad_length = signal_shape[0] + common_divider - tf.math.mod(signal_shape[0], common_divider)
+
+        # create padding
+        signal_zeros = tf.zeros((pad_length - signal_shape[0], signal_shape[1]), tf.float32)
+        x["mel"] = tf.concat([x["mel"], signal_zeros], axis=0)
+
+    if not testing:
+        # pad
+        noise_shape = x['shape_noise']
+        noise_zeros = tf.zeros((pad_length - noise_shape[0], noise_shape[1]), tf.float32)    
+        x["mel_noise"] = tf.concat([x["mel_noise"], noise_zeros], axis=0)
+
     return x
 
 def wrapper_log_mel(x):
     x['mel'] = tf.math.log(1 + x['mel'])
-    
     return x
+
+def wrapper_extract_shape(x):
+    x["shape"] = tf.py_function(lambda x: x.shape, [x["mel"]], tf.int32)
+    return x
+
+def get_waveform(x, noise_root, sample_rate):
+    audio_binary = tf.io.read_file(noise_root+os.sep+x['noise'])
+    audio, _ = tf.audio.decode_wav(audio_binary,
+                                   desired_channels=1,
+                                   desired_samples=sample_rate)
+    audio = tf.squeeze(audio, axis=-1)
+    
+    return {'audio': audio,
+            'label': tf.cast(x['label'], tf.int32),
+            'rate': sample_rate}
+
+def wrapper_dict2tensor(x, features=['mel','label']):
+    return [tf.convert_to_tensor(x[feature]) for feature in features]
+
+def wrapper_pack(x):
+    return {"label": tf.cast(x["label"], tf.int32), "mel":x["mel"], "shape":x["shape"]}
 
 def pitch_shift_data(wave_data, shift_val, bins_per_octave, sample_rate):
 
@@ -183,25 +197,3 @@ def wrapper_change_pitch(x, shift_val, bins_per_octave, sample_rate):
     out = tf.py_function(pitch_shift_data, [x['audio'], shift_val, bins_per_octave, sample_rate], tf.float32)
     x['audio'] = out
     return x
-
-def get_waveform(x, noise_root, sample_rate):
-    audio_binary = tf.io.read_file(noise_root+os.sep+x['noise'])
-    audio, _ = tf.audio.decode_wav(audio_binary,
-                                   desired_channels=1,
-                                   desired_samples=sample_rate)
-    audio = tf.squeeze(audio, axis=-1)
-    
-    return {'noise_wav': audio,
-            'noise_label': x['label'],
-            'rate': sample_rate}
-
-def wrapper_dict2tensor(x, features=['mel','label']):
-    return [tf.convert_to_tensor(x[feature]) for feature in features]
-
-def wrapper_serialize(x):
-    print(x)
-    return tf.py_function(tf.io.serialize_tensor, [x],
-                          [tf.string])[0]
-
-def wrapper_p(x):
-    return tf.py_function(tf.io.parse_tensor, [x, tf.float32], [tf.float32])
