@@ -30,6 +30,9 @@ config = {
                     0: {"class_name": "InputLayer",
                         "config":{ "input_shape": (feature_size, feature_size, channels), },
                     },
+                    0.1: {"class_name": "BatchNormalization",
+                          "config": {},
+                    },
                     1: {"class_name": "Conv2DBlock",
                         "config":{
                              "num_filters": 32,
