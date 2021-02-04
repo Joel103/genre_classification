@@ -124,6 +124,7 @@ class Preprocessor():
         
         # extract tensors
         ds = ds.map(lambda x: wrapper_dict2tensor(x, features=['mel', 'mel']), num_parallel_calls=AUTOTUNE)
+        ds = ds.map(lambda x, y: (tf.expand_dims(x, -1), tf.expand_dims(y, -1)), num_parallel_calls=AUTOTUNE)
         ds = ds.batch(self._config['batch_size']).prefetch(AUTOTUNE)
 
         self.datasets[mode] = ds
@@ -138,6 +139,7 @@ class Preprocessor():
 
         # extract tensors
         ds = ds.map(lambda x: wrapper_dict2tensor(x, features=['mel','label']), num_parallel_calls=AUTOTUNE)
+        ds = ds.map(lambda x, y: (tf.expand_dims(x, -1), y), num_parallel_calls=AUTOTUNE)
         ds = ds.batch(self._config['batch_size']).prefetch(AUTOTUNE)
         
         self.test_dataset = ds
@@ -151,7 +153,6 @@ class Preprocessor():
         ds = ds.map(lambda x: wrapper_rescale(x), num_parallel_calls=AUTOTUNE)
         # TypeError: Expected int64 passed to parameter 'y' of op 'Greater', got 0.1 of type 'float' instead. Error: Expected int64, got 0.1 of type 'float' instead.
         #ds = ds.map(lambda x: wrapper_trim(x, self._config['epsilon']), num_parallel_calls=AUTOTUNE)
-
 
         '''
         ds = ds.map(lambda x: wrapper_change_pitch(x, self._config['shift_val'], self._config['bins_per_octave'], self._config['sample_rate']), num_parallel_calls=AUTOTUNE)
