@@ -1,19 +1,18 @@
+import tensorflow as tf
+import os
+
+
 # load model config
 def load_config(config_path="config.json", verbose=1):
     import json
     with open(config_path, "r") as config_file:
         config_data = json.load(config_file)
 
-    # extract parameter classes
-    data_parameter = config_data["data_parameter"]
-    model_parameter = config_data["model_parameter"]
-    training_parameter = config_data["training_parameter"]
-
     # show content of config
     if verbose:
         print(json.dumps(config_data, indent=2, sort_keys=True))
         
-    return data_parameter, model_parameter, training_parameter
+    return config_data
 
 def save_config(data_parameter, model_parameter, training_parameter, network):
     # writing config file into model folder
@@ -35,3 +34,32 @@ def allow_growth():
                   tf.config.experimental.set_memory_growth(gpu, True)
         except RuntimeError as e:
             print(e)
+
+# Copied from stackoverflow. originally posted by @Alex Martelli, license: CC BY-SA 4.0, link: https://stackoverflow.com/a/3233356
+import collections.abc
+def update(d, u):
+    for k, v in u.items():
+        if isinstance(v, collections.abc.Mapping):
+            d[k] = update(d.get(k, {}), v)
+        else:
+            d[k] = v
+    return d
+
+def wrapper_serialize(x):
+    return tf.py_function(tf.io.serialize_tensor, [x],
+                          [tf.string])[0]
+
+def save_dataset(ds, path):
+    ds = ds.map(lambda x: wrapper_serialize(x))
+    writer = tf.data.experimental.TFRecordWriter(path)
+    try:
+        writer.write(ds) 
+    except tf.errors.NotFoundError:
+        os.makedirs(os.path.dirname(path))
+        writer.write(ds)
+    return True
+    
+def load_dataset(path, dtype=tf.float32):
+    ds_new = tf.data.TFRecordDataset(path)
+    ds_new = ds_new.map(lambda x: tf.io.parse_tensor(x, dtype))
+    return ds_new

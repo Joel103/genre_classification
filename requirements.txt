@@ -1,3 +1,9 @@
 argparse
 sklearn
-# tensorflow
+tensorflow==2.4.1
+tensorflow-io
+tensorflow-datasets
+pydub
+wandb==0.10.15
+soundfile
+plotly
