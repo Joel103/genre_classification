@@ -16,6 +16,7 @@ def register_custom_objects():
     
     get_custom_objects()["EncoderInput"] = BuildingBlock
     get_custom_objects()["Output"] = BuildingBlock
+    get_custom_objects()["BuildingBlock"] = BuildingBlock
 
 def reset_custom_objects():
     get_custom_objects().clear()
@@ -32,7 +33,7 @@ def create_encoder(encoder_input_config, encoder_config):
     return (_encoder_input, _encoder_only)
 
 def create_decoder(decoder_config, finalizer_config, output_config):
-    paper_like_example = True
+    paper_like_example = False
 
     # build decoder
     decoder = deserialize(decoder_config)
