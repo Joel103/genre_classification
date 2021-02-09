@@ -21,6 +21,6 @@
         "dropout_rate": 0.2,
         "calculation_dtype" : "float16",
         "calculation_epsilon" : 1e-7,
-        "seed" : 42
+        "seed" : null
     }
 }

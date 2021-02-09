@@ -176,7 +176,7 @@ class BuildingBlock(tf.keras.layers.Layer):
     
 
 class Finalizer(tf.keras.layers.Layer):
-    def __init__(self, paper_like_example, **kwargs):
+    def __init__(self, paper_like_example=False, **kwargs):
         super().__init__(**kwargs)
         
         self.layers = []
