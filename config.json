@@ -19,7 +19,7 @@
         "optimizer_parameter": {"beta_1": 0.9, "beta_2": 0.999, "epsilon": 1e-07},
         "optimizer_clip_parameter": {"clipnorm": 1.0, "clipvalue": 2.0},
         "dropout_rate": 0.2,
-        "calculation_dtype" : "float16",
+        "calculation_dtype" : "float32",
         "calculation_epsilon" : 1e-7,
         "seed" : null
     }

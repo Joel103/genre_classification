@@ -42,20 +42,28 @@ def wrapper_rescale(x):
     x['input'] /= tf.math.reduce_max(x['input'])
     return x
 
+def wrapper_gpu(x, nfft, window, stride, sample_rate, mels, fmin_mels, fmax_mels, top_db, db, logger):
+    with tf.device("/gpu:0"):
+        x = wrapper_spect(x, nfft, window, stride, logger)
+        x = wrapper_mel(x, sample_rate, mels, fmin_mels, fmax_mels, top_db, db, logger)
+        return x
+    
 def wrapper_spect(x, nfft, window, stride, logger=None):
     
     start_time = time.time()
+
     x['spectrogram'] = tfio.experimental.audio.spectrogram(x['input'],
                                                            nfft=nfft,
                                                            window=window,
                                                            stride=stride)
+        
     if logger is not None:
         logger.info(f'computing spectrogram took {np.round(time.time() - start_time, 2)} s')
 
     x.pop('input')
     return x
 
-def wrapper_mel(x, sample_rate, mels, fmin_mels, fmax_mels, top_db, db=False, light=True, logger=None):
+def wrapper_mel(x, sample_rate, mels, fmin_mels, fmax_mels, top_db, db=False, logger=None):
     start_time = time.time()
     x['mel'] = tfio.experimental.audio.melscale(x['spectrogram'],
                                                 rate=sample_rate,
@@ -165,7 +173,7 @@ def wrapper_log_mel(x):
     return x
 
 def wrapper_extract_shape(x):
-    x["shape"] = tf.py_function(lambda x: x.shape, [x["mel"]], tf.int32)
+    x["shape"] = tf.shape(x["mel"])
     return x
 
 def get_waveform(x, noise_root, sample_rate):
@@ -181,6 +189,9 @@ def get_waveform(x, noise_root, sample_rate):
 
 def wrapper_dict2tensor(x, features=['mel','label']):
     return [tf.convert_to_tensor(x[feature]) for feature in features]
+
+def wrapper_expand_both_dims(x, y):
+    return (tf.expand_dims(x, -1), tf.expand_dims(y, -1))
 
 def wrapper_pack(x):
     return {"label": tf.cast(x["label"], tf.int32), "mel":x["mel"], "shape":x["shape"]}

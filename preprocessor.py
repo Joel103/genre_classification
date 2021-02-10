@@ -52,7 +52,6 @@ class Preprocessor():
         test_size = int(self._config['test_size'] * dataset_size)
         
         # split data
-        # TODO: check if the data is thoroughly mixed
         dataset = dataset.shuffle(dataset_size) # is it smart to do it this way?
         self.datasets["train"] = dataset.take(train_size)
         self.datasets["test"] = dataset.skip(train_size)
@@ -68,13 +67,16 @@ class Preprocessor():
         noise_data = meta.loc[meta['label'].isin(noise_classes)].index.values
 
         noise_ds2 = tf.data.Dataset.from_tensor_slices({'noise': noise_data,
-                                                        'label': [0]*len(noise_data)})
+                                                        'label': [0]*len(noise_data)}).repeat()
 
         self.datasets['noise'] = noise_ds2.map(lambda x: get_waveform(x,
                                                                   self._config['noise_root'],
                                                                   self._config['sample_rate']),
                                            num_parallel_calls=AUTOTUNE)
-        
+        for mode in self.available_modi:
+            self.datasets[mode].cache().shuffle(self._config['shuffle_buffer_size'])
+            self.offline_preprocessing(mode)
+
         if self.logger is not None:
             self.logger.info('dataset loaded')
     
@@ -104,17 +106,12 @@ class Preprocessor():
         
         self.logger.info(f'started preprocessing and augmenting {mode} data')
         
-        ds_s = self.datasets[mode]
-        ds_s = ds_s.shuffle(self._config['shuffle_buffer_size'])
-
-        ds_n = self.datasets["noise"].repeat().shuffle(self._config['shuffle_buffer_size'])
-        
         # zip noise dataset
-        ds = tf.data.Dataset.zip((ds_s, ds_n))
+        ds = tf.data.Dataset.zip((self.datasets[mode], self.datasets["noise"]))
         
         # merge features into one featureDict
         ds = ds.map(lambda x, y: wrapper_merge_features(x, y), num_parallel_calls=AUTOTUNE)
-        
+
         # make to length which the network understands (common_divider)
         ds = ds.map(lambda x: wrapper_shape_to_proper_length(x, self._config["common_divider"], clip=True), num_parallel_calls=AUTOTUNE)
         
@@ -124,7 +121,7 @@ class Preprocessor():
         
         # extract tensors
         ds = ds.map(lambda x: wrapper_dict2tensor(x, features=['mel', 'mel']), num_parallel_calls=AUTOTUNE)
-        ds = ds.map(lambda x, y: (tf.expand_dims(x, -1), tf.expand_dims(y, -1)), num_parallel_calls=AUTOTUNE)
+        ds = ds.map(lambda x, y: wrapper_expand_both_dims(x, y), num_parallel_calls=AUTOTUNE)
         ds = ds.batch(self._config['batch_size']).prefetch(AUTOTUNE)
 
         self.datasets[mode] = ds
@@ -139,7 +136,9 @@ class Preprocessor():
 
         # extract tensors
         ds = ds.map(lambda x: wrapper_dict2tensor(x, features=['mel','label']), num_parallel_calls=AUTOTUNE)
-        ds = ds.map(lambda x, y: (tf.expand_dims(x, -1), y), num_parallel_calls=AUTOTUNE)
+        def wrapper_expand_dims(x, y):
+            return (tf.expand_dims(x, -1), y)
+        ds = ds.map(lambda x, y: wrapper_expand_dims(x,y), num_parallel_calls=AUTOTUNE)
         ds = ds.batch(self._config['batch_size']).prefetch(AUTOTUNE)
         
         self.test_dataset = ds
@@ -148,32 +147,25 @@ class Preprocessor():
     
     def preprocess_wav(self, ds):
         ds = ds.map(lambda x: wrapper_cast_offline(x), num_parallel_calls=AUTOTUNE)
-        # Not necessary anymore
-        #ds = ds.map(lambda x: wrapper_cut_15(x), num_parallel_calls=AUTOTUNE)
         ds = ds.map(lambda x: wrapper_rescale(x), num_parallel_calls=AUTOTUNE)
-        # TypeError: Expected int64 passed to parameter 'y' of op 'Greater', got 0.1 of type 'float' instead. Error: Expected int64, got 0.1 of type 'float' instead.
-        #ds = ds.map(lambda x: wrapper_trim(x, self._config['epsilon']), num_parallel_calls=AUTOTUNE)
-
         '''
+        ds = ds.map(lambda x: wrapper_trim(x, self._config['epsilon']), num_parallel_calls=AUTOTUNE)
         ds = ds.map(lambda x: wrapper_change_pitch(x, self._config['shift_val'], self._config['bins_per_octave'], self._config['sample_rate']), num_parallel_calls=AUTOTUNE)
         ds = ds.map(lambda x: wrapper_fade(x, self._config['fade']), num_parallel_calls=AUTOTUNE)
-        ds = ds.map(lambda x: wrapper_normalize(x), num_parallel_calls=AUTOTUNE)
+        ds = ds.map(lambda x: wrapper_normalize(x), num_parallel_calls=AUTOTUNE)        
         '''
-        
         return ds
 
     def to_log_mel(self, ds):
-        ds = ds.map(lambda x: wrapper_spect(x,
+        ds = ds.map(lambda x: wrapper_gpu(x,
                                             self._config['nfft'],
                                             self._config['window'],
                                             self._config['stride'],
-                                            self.logger),
-                    num_parallel_calls=AUTOTUNE)
-        ds = ds.map(lambda x: wrapper_mel(x,
                                           self._config['sample_rate'], self._config['mels'],
                                           self._config['fmin_mels'], self._config['fmax_mels'],
                                           self._config['top_db'], db=0, logger=self.logger),
-                    num_parallel_calls=AUTOTUNE) # Convert to mel-spectrogram
+                    num_parallel_calls=AUTOTUNE)
+        
         ds = ds.map(lambda x: wrapper_log_mel(x), num_parallel_calls=AUTOTUNE)
         ds = ds.map(lambda x: wrapper_normalize(x), num_parallel_calls=AUTOTUNE)
         ds = ds.map(lambda x: wrapper_extract_shape(x), num_parallel_calls=AUTOTUNE)
@@ -193,44 +185,12 @@ class Preprocessor():
         ds = self.preprocess_wav(ds)
         # spect-level
         ds = self.to_log_mel(ds)
-        
+        # adding shape information
+        ds = ds.map(lambda x: wrapper_extract_shape(x), num_parallel_calls=AUTOTUNE)
+
         self.datasets[mode] = ds
         
         self.logger.info('done preprocessing and augmenting data')
-    
-    def save_mels(self, skip=[]):
-        for mode in self.available_modi:
-            if mode in skip:
-                continue
-            ds = self.datasets[mode]
-            assert not ds is None
-            
-            # extract shape and save it with the samples
-            ds = ds.map(lambda x: wrapper_extract_shape(x), num_parallel_calls=AUTOTUNE)
-            ds = ds.map(lambda x: wrapper_pack(x), num_parallel_calls=AUTOTUNE)
-            
-            # saving
-            tf.data.experimental.save(ds, f"./{mode}/ds/", compression=None, shard_func=None)
-            self.datasets[mode] = ds
-            
-            self.logger.info(f'done saving data for {mode}')
-
-    def load_mels(self, skip=[]):
-        for mode in self.available_modi:
-            if mode in skip:
-                continue
-
-            # loading
-            ds = tf.data.experimental.load(f"./{mode}/ds/", (
-                tf.TensorSpec(shape=(), dtype=tf.int32), # label
-                tf.TensorSpec(shape=(None, None), dtype=tf.float32), # mel
-                tf.TensorSpec(shape=(2), dtype=tf.int32), # shape
-            ), compression=None, reader_func=None)
-            ds = ds.map(lambda label, mel, shape: {"label":label, "mel":mel, "shape":shape}, num_parallel_calls=AUTOTUNE)
-
-            self.datasets[mode] = ds
-            
-            self.logger.info(f'done loading data for {mode}')
 
     @property
     def available_modi(self):
