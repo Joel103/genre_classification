@@ -123,8 +123,11 @@ class Preprocessor():
         ds = ds.map(lambda x: wrapper_mask(x, self._config['freq_mask'], self._config['time_mask'], self._config['param_db'], db=0), num_parallel_calls=AUTOTUNE)
         
         # extract tensors
-        ds = ds.map(lambda x: wrapper_dict2tensor(x, features=['mel', 'mel']), num_parallel_calls=AUTOTUNE)
-        ds = ds.map(lambda x, y: (tf.expand_dims(x, -1), tf.expand_dims(y, -1)), num_parallel_calls=AUTOTUNE)
+        ds = ds.map(lambda x: wrapper_dict2tensor(x, features=['mel']), num_parallel_calls=AUTOTUNE)
+        
+        ds = ds.flat_map(lambda x: tf.data.Dataset.from_tensor_slices(tf.reshape(x, (-1, 64, 64))))
+        
+        ds = ds.map(lambda x: (tf.expand_dims(x, -1), tf.expand_dims(x, -1)), num_parallel_calls=AUTOTUNE)
         ds = ds.batch(self._config['batch_size']).prefetch(AUTOTUNE)
 
         self.datasets[mode] = ds
@@ -140,10 +143,17 @@ class Preprocessor():
         # extract tensors
         ds = ds.map(lambda x: wrapper_dict2tensor(x, features=['mel','label']), num_parallel_calls=AUTOTUNE)
         ds = ds.map(lambda x, y: (tf.expand_dims(x, -1), y), num_parallel_calls=AUTOTUNE)
+        
+        # here we do an reshape of the image to subimages and replicate the label for all of them
+        def flatten(x, y):
+            x_ds = tf.data.Dataset.from_tensor_slices(tf.reshape(x, (-1, self._config["common_divider"], self._config["common_divider"])))
+            y_ds = tf.data.Dataset.from_tensor_slices(tf.reshape(y,(1,-1))).repeat()
+            return tf.data.Dataset.zip((x_ds.flat_map(lambda x: tf.data.Dataset.from_tensor_slices([x])), y_ds))
+        ds = ds.flat_map(lambda x,y: flatten(x,y))
+        
         ds = ds.batch(self._config['batch_size']).prefetch(AUTOTUNE)
-        
-        self.test_dataset = ds
-        
+
+        self.datasets["test"] = ds
         self.logger.info('done preprocessing and augmenting test data')
     
     def preprocess_wav(self, ds):

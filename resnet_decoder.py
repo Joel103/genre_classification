@@ -28,13 +28,14 @@ class BasicBlock_Transposed(tf.keras.Model):
             )
         else:
             self.shortcut = lambda x, _: x
+        self.activation = tf.keras.layers.ReLU()
 
         def call(self, x, training=False):
             # if training: print("=> training network ... ")
-            out = tf.nn.relu(self.bn1(self.conv1(x), training=training))
+            out = self.activation(self.bn1(self.conv1(x), training=training))
             out = self.bn2(self.conv2(out), training=training)
             out += self.shortcut(x, training)
-            return tf.nn.relu(out)
+            return self.activation(out)
 
 
 class Bottleneck_Transposed(tf.keras.Model):
@@ -58,18 +59,19 @@ class Bottleneck_Transposed(tf.keras.Model):
             )
         else:
             self.shortcut = lambda x, _: x
+        self.activation = tf.keras.layers.ReLU()
 
     def call(self, x, training=False):
-        out = tf.nn.relu(self.bn1(self.conv1(x), training))
-        out = tf.nn.relu(self.bn2(self.conv2(out), training))
+        out = self.activation(self.bn1(self.conv1(x), training))
+        out = self.activation(self.bn2(self.conv2(out), training))
         out = self.bn3(self.conv3(out), training)
         out += self.shortcut(x, training)
-        return tf.nn.relu(out)
+        return self.activation(out)
 
 
 class ResNet_Decoder(tf.keras.Model):
     def __init__(self, block, num_blocks, num_classes=10):
-        super(ResNet, self).__init__()
+        super(ResNet_Decoder, self).__init__()
         self.in_channels = 64
 
         self.conv1 = tf.keras.layers.Conv2DTranspose(64, 3, 1, use_bias=False)
@@ -83,6 +85,7 @@ class ResNet_Decoder(tf.keras.Model):
         self.pool = tf.keras.layers.UpSampling2D((4, 4), interpolation="nearest")
 
         self.linear = tf.keras.layers.Dense(units=num_classes, activation="softmax")
+        self.activation = tf.keras.layers.ReLU()
 
     def _make_layer(self, block, out_channels, num_blocks, stride):
         strides = [stride] + [1] * (num_blocks - 1)
@@ -93,36 +96,73 @@ class ResNet_Decoder(tf.keras.Model):
         return tf.keras.Sequential(layers)
 
     def call(self, x, training=False):
-        out = self.pool(self.bn1(self.conv1(x)))
-        out = tf.nn.relu(out, training)
-        out = self.layer1(out, training=training)
-        out = self.layer2(out, training=training)
-        out = self.layer3(out, training=training)
-        out = self.layer4(out, training=training)
+        out = x
 
         # For classification
-
-        out = tf.reshape(out, (out.shape[0], -1))
         out = self.linear(out)
-        return out
+        out = tf.reshape(out, (out.shape[0], 1, 1, -1))
 
+        out = self.pool(self.bn1(self.conv1(x), training))
+        out = self.activation(out)
+        out = self.layer4(out, training=training)
+        out = self.layer3(out, training=training)
+        out = self.layer2(out, training=training)
+        out = self.layer1(out, training=training)
+
+        return out
 
 def ResNet18_Decoder():
     return ResNet_Decoder(BasicBlock_Transposed, [2, 2, 2, 2])
 
-
 def ResNet34_Decoder():
     return ResNet_Decoder(BasicBlock_Transposed, [3, 4, 6, 3])
-
 
 def ResNet50_Decoder():
     return ResNet_Decoder(Bottleneck_Transposed, [3, 4, 14, 3])
 
-
 def ResNet101_Decoder():
     return ResNet_Decoder(Bottleneck_Transposed, [3, 4, 23, 3])
-
 
 def ResNet152_Decoder():
     return ResNet_Decoder(Bottleneck_Transposed, [3, 8, 36, 3])
 
+def Basic_Decoder():
+    model = tf.keras.Sequential([
+        tf.keras.layers.Reshape((1, 1, -1)),
+        tf.keras.layers.UpSampling2D((2, 2), interpolation="nearest"),
+        tf.keras.layers.Conv2DTranspose(1024, 3, strides=(1, 1), padding="same"),
+        tf.keras.layers.LeakyReLU(),
+        tf.keras.layers.UpSampling2D((2, 2), interpolation="nearest"),
+        tf.keras.layers.Conv2DTranspose(512, 3, strides=(1, 1), padding="same"),
+        tf.keras.layers.LeakyReLU(),
+        tf.keras.layers.UpSampling2D((2, 2), interpolation="nearest"),
+        tf.keras.layers.Conv2DTranspose(256, 3, strides=(1, 1), padding="same"),
+        tf.keras.layers.LeakyReLU(),
+        tf.keras.layers.UpSampling2D((2, 2), interpolation="nearest"),
+        tf.keras.layers.Conv2DTranspose(128, 3, strides=(1, 1), padding="same"),
+        tf.keras.layers.LeakyReLU(),
+        tf.keras.layers.UpSampling2D((2, 2), interpolation="nearest"),
+        tf.keras.layers.Conv2DTranspose(64, 3, strides=(1, 1), padding="same"),
+        tf.keras.layers.LeakyReLU(),
+        tf.keras.layers.UpSampling2D((2, 2), interpolation="nearest"),
+        tf.keras.layers.Conv2DTranspose(32, 3, strides=(1, 1), padding="same"),
+        tf.keras.layers.LeakyReLU(),
+        tf.keras.layers.Conv2DTranspose(16, 3, strides=(1, 1), padding="same"),
+        tf.keras.layers.LeakyReLU(),
+        tf.keras.layers.Conv2DTranspose(8, 3, strides=(1, 1), padding="same"),
+        tf.keras.layers.LeakyReLU(),
+        tf.keras.layers.Conv2DTranspose(4, 3, strides=(1, 1), padding="same"),
+        tf.keras.layers.LeakyReLU(),
+        tf.keras.layers.Conv2DTranspose(1, 3, strides=(1, 1), padding="same"),
+    ])
+    return model
+
+if __name__ == "__main__":
+    from utils import allow_growth
+    allow_growth()
+    
+    model = Basic_Decoder()
+    model.build(input_shape=[1, 1, 1, 1024])
+    
+    print(model.summary())
+    print(model.predict_on_batch(tf.ones([1, 1, 1, 1024], tf.float32)).shape)
