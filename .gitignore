@@ -4,3 +4,8 @@ _data
 __pycache__
 main.py
 *.log
+
+noise/
+test/
+train/
+val/
