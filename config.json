@@ -12,7 +12,7 @@
 
     "training_parameter":
     {
-        "epochs": 500,
+        "epochs": 5000,
         "save_steps": 5,
         "learning_rate": 0.001,
         "optimizer_class_name": "adam",
