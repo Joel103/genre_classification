@@ -57,13 +57,8 @@ class Network():
     def save(self):
         #create model directory first
         os.makedirs(self._model_path, exist_ok=True)
-        # serialize model to JSON
-        model_json = self._model.to_json()
-        with open("%smodel.json" % (self._model_path), "w") as json_file:
-            json_file.write(model_json)
         try:
-            # serialize weights to HDF5
-            self._model.save_weights("%sweights.%05d.hdf5" % (self._model_path, self._epoch))
+            self._model.save("%sweights.%05d" % (self._model_path, self._epoch), save_format="tf")
             if self._verbose:
                 print("Saved model to disk")
         except RuntimeError:
@@ -76,12 +71,8 @@ class Network():
         if model_path is None:
             model_path = self._model_path
         
-        # load json and create model
-        with open("%smodel.json" % (model_path), "r") as json_file:
-            self._model = model_from_json(json_file.read())
-        
         # load weights into new model
-        self._model.load_weights("%sweights.%05d.hdf5" % (model_path, epoch))
+        self._model = tf.keras.models.load_model("%sweights.%05d" % (model_path, epoch))
         self._epoch = epoch
         self._model_path = model_path
         

@@ -16,3 +16,93 @@ class SaveEveryNthEpochCustom(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         if self.network.epoch % self.save_steps == 0:
             self.network.save()
+
+class ReconstructImages(tf.keras.callbacks.Callback):
+    def __init__(self, network, period, dataset, wandb_wrapper):
+        self.network = network
+        self.period = period
+        self.dataset = dataset
+        self.wandb_wrapper = wandb_wrapper
+        
+    def on_epoch_end(self, epoch, logs=None):
+        if self.network.epoch % self.period == 0:
+            self.reconstruct_images()
+
+    def reconstruct_images(self):
+        import numpy as np
+        from matplotlib import pyplot as plt
+        import wandb
+        images = []
+        histograms = []
+        for elem in self.dataset:
+            batch_size = elem[0].shape[0]
+            prediction = self.network.predict_on_batch(elem[0])
+            indices = np.arange(batch_size)
+            np.random.shuffle(indices)
+            for index in indices[:5]:
+                x = elem[0][index][..., 0].numpy().astype(np.float32).T
+                y = prediction[index][..., 0].astype(np.float32).T
+                images += [self.wandb_wrapper.post_plt_image(x, y, title="Images", tag="side-by-side-images")]
+                histograms += [self.wandb_wrapper.post_plt_histogram(x, y, title="Histogram", tag="overlay-histogram", alpha=0.35, bins=50)]
+            break
+        wandb.log({"side-by-side-images": images})
+        wandb.log({"overlay-histogram": histograms})
+            
+class CreateEmbedding(tf.keras.callbacks.Callback):
+    def __init__(self, network, period, dataset, num_classes=10):
+        self.network = network
+        self.period = period
+        self.dataset = dataset
+        self.num_classes = num_classes
+        
+    def on_epoch_end(self, epoch, logs=None):
+        if self.network.epoch % self.period == 0:
+            self.create_embedding()
+
+    def create_embedding(self):
+        import numpy as np
+        import wandb
+        from sklearn.manifold import TSNE
+        from itertools import cycle
+        from matplotlib import pyplot as plt
+        from matplotlib.ticker import NullFormatter
+
+        ''' Collect Network Embeddings '''
+        collect_embeddings = []
+        collect_labels = []
+        for elem in self.dataset:
+            for (x, y) in zip(elem[0], elem[1]):
+                prediction = self.network.predict_embedding_on_batch(x[np.newaxis])
+                collect_embeddings += [prediction]
+                collect_labels += [y]
+        
+        ''' Perform T-SNE '''
+        embeddings = tf.concat(collect_embeddings, axis=0)
+        labels = np.concatenate(collect_labels, axis=0)
+        x = tf.reshape(embeddings,(-1,embeddings.shape[-1]))
+        X_embedded = TSNE(n_components=2).fit_transform(x)
+
+        ''' Some Preparation For Colored Plotting '''
+        collect_colors_markers = {}
+        prop_cycle = plt.rcParams['axes.prop_cycle']
+        colors = cycle(prop_cycle.by_key()['color'])
+        markers = cycle(('o', ','))
+
+        for i in range(self.num_classes):
+            collect_colors_markers[i] = (next(colors), next(markers))
+
+        ''' Scatter Plot Embeddings '''
+        # Create figure
+        fig = plt.figure(figsize=(8, 8))
+        # Add scatter plot
+        ax = fig.add_subplot(111)
+        for embedding, label in zip(X_embedded, labels):
+            ax.scatter(embedding[0], embedding[1], alpha=0.5, c=collect_colors_markers[label][0], marker=collect_colors_markers[label][1])
+
+        ax.xaxis.set_major_formatter(NullFormatter())
+        ax.yaxis.set_major_formatter(NullFormatter())
+        ax.axis('tight')
+        
+        # send to wandb
+        wandb.log({"test embedding - label colored": wandb.Image(plt)})
+        plt.close()

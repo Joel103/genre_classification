@@ -14,6 +14,8 @@
     {
         "epochs": 5000,
         "save_steps": 5,
+        "embedding_period": 50,
+        "reconstruction_period": 50,
         "learning_rate": 0.001,
         "optimizer_class_name": "adam",
         "optimizer_parameter": {"beta_1": 0.9, "beta_2": 0.999, "epsilon": 1e-07},

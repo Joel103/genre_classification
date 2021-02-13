@@ -186,9 +186,10 @@ class WandbWrapper():
         else:
             fig.colorbar(im, ax=ax0)
         plt.suptitle(title)
-        wandb.log({tag: wandb.Image(plt)})
+        image = wandb.Image(plt)
         plt.close()
-
+        return image
+    
     def post_plt_histogram(self, data, prediction=None, title="", tag="", **hist_kwargs):
         '''
         Uploads one or two histograms to W&B. In the case of two we make an overlay in one plot.
@@ -207,5 +208,6 @@ class WandbWrapper():
         plt.legend()
         plt.title(title)
         plt.tight_layout(pad=1.2, h_pad=0.2, w_pad=0.2)
-        wandb.log({tag: wandb.Image(plt)})
+        image = wandb.Image(plt)
         plt.close()
+        return image

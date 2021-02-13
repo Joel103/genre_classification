@@ -146,11 +146,11 @@ class Preprocessor():
         
         # here we do an reshape of the image to subimages and replicate the label for all of them
         def flatten(x, y):
-            x_ds = tf.data.Dataset.from_tensor_slices(tf.reshape(x, (-1, self._config["common_divider"], self._config["common_divider"])))
+            x_ds = tf.data.Dataset.from_tensor_slices(tf.reshape(x, (-1, self._config["common_divider"], self._config["common_divider"], 1)))
             y_ds = tf.data.Dataset.from_tensor_slices(tf.reshape(y,(1,-1))).repeat()
             return tf.data.Dataset.zip((x_ds.flat_map(lambda x: tf.data.Dataset.from_tensor_slices([x])), y_ds))
         ds = ds.flat_map(lambda x,y: flatten(x,y))
-        
+
         ds = ds.batch(self._config['batch_size']).prefetch(AUTOTUNE)
 
         self.datasets["test"] = ds
