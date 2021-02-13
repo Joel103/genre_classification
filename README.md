@@ -1,10 +1,11 @@
 ## Open Add-Ons
 
-1. Integrate classifier model into training loop.
+1. Integrate classifier model into training loop. 🧰
 2. Build Inference pipeline: embed -> song-recognition.
 3. Inspect & maybe implement Transfer Learning (for spectrograms?).
 4. Prepare slides.
-5. Build ResNet-Model.
+5. Build ResNet-Model. ✅ 
+6. Test different dataset.
 
 ----
 
