@@ -52,6 +52,7 @@ class Network():
         # compile model
         self._model.compile(optimizer=self._optimizer,
                           loss=self.loss(None, None),
+                          loss_weights={"decoder":1, "classifier": 0.1},
                           metrics=self.metrics(None, None))
         
     def save(self):
@@ -120,14 +121,27 @@ class Network():
     def _create_model(self):
         ae_model.register_custom_objects()
         #ae_model.get_custom_objects()
+        number_classes = 10
         
         # initial definition of the sequential model
         (self._encoder_input, self._encoder_only) = ae_model.create_encoder(self._model_parameter["encoder_input"], self._model_parameter["encoder"])
         (self._decoder_input, self._decoder_only) = ae_model.create_decoder(self._model_parameter["decoder"], self._model_parameter["finalizer"], self._model_parameter["output"])
         
+        # classifier
+        classifier = tf.keras.Sequential([
+            tf.keras.layers.Dense(128, activation='relu'),
+            tf.keras.layers.Dense(64, activation='relu'),
+            tf.keras.layers.Dense(number_classes, activation='softmax')
+        ], name="classifier")
+        
+        encoder = self._encoder_only(self._encoder_input)
         # combine networks
-        autoencoder_output = self._decoder_only(self._encoder_only(self._encoder_input))
-        autoencoder = tf.keras.Model(inputs=self._encoder_input, outputs=autoencoder_output, name="autoencoder")
+        autoencoder_output = self._decoder_only(encoder)
+        # classifier output
+        classifier_output = classifier(encoder)
+        
+        autoencoder = tf.keras.Model(inputs=self._encoder_input, 
+                                     outputs={"decoder": autoencoder_output, "classifier": classifier_output}, name="autoencoder")
         self._model = autoencoder
         
     def _add_callbacks(self):
@@ -164,14 +178,14 @@ class Network():
     def loss(self, y_true, y_pred):
         # calc mean over the batch dimension
         #return K.mean(self._calc_loss(y_true, y_pred), axis=0, keepdims=True)
-        return "mae"
+        return { "decoder": "mae", "classifier": "categorical_crossentropy", }
         
     def metrics(self, y_true, y_pred):
         # return <some metrics>
-        metrics = []
-        metrics += ["mse"]
-        metrics += ["mae"]
-        metrics += [keras.metrics.RootMeanSquaredError()]
+        metrics = {}
+        metrics["decoder"] = ["mse"]
+        metrics["decoder"] += ["mae"]
+        metrics["classifier"] = ["accuracy"]
         return metrics
     
     def _calc_loss(self, labels, predictions):

@@ -36,7 +36,7 @@ class ReconstructImages(tf.keras.callbacks.Callback):
         histograms = []
         for elem in self.dataset:
             batch_size = elem[0].shape[0]
-            prediction = self.network.predict_on_batch(elem[0])
+            prediction = self.network.predict_on_batch(elem[0])["decoder"]
             indices = np.arange(batch_size)
             np.random.shuffle(indices)
             for index in indices[:5]:
@@ -71,10 +71,10 @@ class CreateEmbedding(tf.keras.callbacks.Callback):
         collect_embeddings = []
         collect_labels = []
         for elem in self.dataset:
-            for (x, y) in zip(elem[0], elem[1]):
+            for (x, y) in zip(elem[0], elem[1]["classifier"]):
                 prediction = self.network.predict_embedding_on_batch(x[np.newaxis])
                 collect_embeddings += [prediction]
-                collect_labels += [y]
+                collect_labels += [tf.argmax(y, axis=1)]
         
         ''' Perform T-SNE '''
         embeddings = tf.concat(collect_embeddings, axis=0)

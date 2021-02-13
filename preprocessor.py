@@ -27,6 +27,7 @@ class Preprocessor():
         self.ready = False
         self.logger = None
         self.noisy_samples = None
+        self.num_classes = 10
         
         self.datasets = { key : None for key in self.available_modi}
         
@@ -123,13 +124,11 @@ class Preprocessor():
         ds = ds.map(lambda x: wrapper_mask(x, self._config['freq_mask'], self._config['time_mask'], self._config['param_db'], db=0), num_parallel_calls=AUTOTUNE)
         
         # extract tensors
-        ds = ds.map(lambda x: wrapper_dict2tensor(x, features=['mel']), num_parallel_calls=AUTOTUNE)
-        
-        ds = ds.flat_map(lambda x: tf.data.Dataset.from_tensor_slices(tf.reshape(x, (-1, 64, 64))))
-        
-        ds = ds.map(lambda x: (tf.expand_dims(x, -1), tf.expand_dims(x, -1)), num_parallel_calls=AUTOTUNE)
-        ds = ds.batch(self._config['batch_size']).prefetch(AUTOTUNE)
+        ds = ds.map(lambda x: wrapper_dict2tensor(x, features=['mel', 'label']), num_parallel_calls=AUTOTUNE)
+        ds = ds.flat_map(lambda x,y: self.flatten(x,y))
+        ds = ds.map(lambda x, y: (x, {"decoder": x, "classifier": y}), num_parallel_calls=AUTOTUNE)
 
+        ds = ds.batch(self._config['batch_size']).prefetch(AUTOTUNE)
         self.datasets[mode] = ds
         self.logger.info(f'done preprocessing and augmenting {mode} data')
 
@@ -141,18 +140,12 @@ class Preprocessor():
         ds = ds.map(lambda x: wrapper_shape_to_proper_length(x, self._config["common_divider"], clip=True, testing=True), num_parallel_calls=AUTOTUNE)
 
         # extract tensors
-        ds = ds.map(lambda x: wrapper_dict2tensor(x, features=['mel','label']), num_parallel_calls=AUTOTUNE)
-        ds = ds.map(lambda x, y: (tf.expand_dims(x, -1), y), num_parallel_calls=AUTOTUNE)
-        
+        ds = ds.map(lambda x: wrapper_dict2tensor(x, features=['mel', 'label']), num_parallel_calls=AUTOTUNE)
         # here we do an reshape of the image to subimages and replicate the label for all of them
-        def flatten(x, y):
-            x_ds = tf.data.Dataset.from_tensor_slices(tf.reshape(x, (-1, self._config["common_divider"], self._config["common_divider"], 1)))
-            y_ds = tf.data.Dataset.from_tensor_slices(tf.reshape(y,(1,-1))).repeat()
-            return tf.data.Dataset.zip((x_ds.flat_map(lambda x: tf.data.Dataset.from_tensor_slices([x])), y_ds))
-        ds = ds.flat_map(lambda x,y: flatten(x,y))
+        ds = ds.flat_map(lambda x,y: self.flatten(x,y))
+        ds = ds.map(lambda x, y: (x, {"classifier": y}), num_parallel_calls=AUTOTUNE)
 
         ds = ds.batch(self._config['batch_size']).prefetch(AUTOTUNE)
-
         self.datasets["test"] = ds
         self.logger.info('done preprocessing and augmenting test data')
     
@@ -241,6 +234,12 @@ class Preprocessor():
             self.datasets[mode] = ds
             
             self.logger.info(f'done loading data for {mode}')
+
+    def flatten(self, x, y):
+        x_ds = tf.data.Dataset.from_tensor_slices(tf.reshape(x, (-1, self._config["common_divider"], self._config["common_divider"], 1)))
+        y_ds = tf.data.Dataset.from_tensor_slices(tf.reshape(y,(1,-1))).repeat()
+        y_ds = y_ds.map(lambda y: tf.one_hot(y, self.num_classes))
+        return tf.data.Dataset.zip((x_ds.flat_map(lambda x: tf.data.Dataset.from_tensor_slices([x])), y_ds))
 
     @property
     def available_modi(self):
