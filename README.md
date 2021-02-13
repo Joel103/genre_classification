@@ -6,6 +6,7 @@
 4. Prepare slides.
 5. Build ResNet-Model. ✅ 
 6. Test different dataset.
+7. Extending scope lenght of each image (1 image should have longer temporal view than ~3 sec.).
 
 ----
 
