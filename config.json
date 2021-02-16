@@ -12,7 +12,7 @@
 
     "training_parameter":
     {
-        "epochs": 5000,
+        "epochs": 1000,
         "save_steps": 50,
         "embedding_period": 50,
         "reconstruction_period": 50,

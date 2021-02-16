@@ -39,6 +39,15 @@ class Preprocessor():
         return self._config
     
     @tf.autograph.experimental.do_not_convert
+    def load_fma(self):
+        meta = pd.read_csv("data/fma_labels.csv")
+        filename = meta["filename"].values
+        labels = meta["label"].values
+        ds = tf.data.Dataset.from_tensor_slices({'noise': filename, 'label': labels})
+        ds = ds.map(lambda x: get_waveform(x, "/media/", -1), num_parallel_calls=AUTOTUNE)
+        self.datasets['fma'] = ds
+
+    @tf.autograph.experimental.do_not_convert
     def load_data(self, download=False, data_dir="tensorflow_datasets"):
         # tbd - data has to be downloaded first 
         dataset, self.ds_info = tfds.load(self._config['data_root'],
@@ -132,11 +141,11 @@ class Preprocessor():
         self.datasets[mode] = ds
         self.logger.info(f'done preprocessing and augmenting {mode} data')
 
-    def launch_test_pipeline(self):
+    def launch_test_pipeline(self, mode="test"):
         
         self.logger.info('started preprocessing and augmenting test data')
         
-        ds = self.datasets["test"]
+        ds = self.datasets[mode]
         ds = ds.map(lambda x: wrapper_shape_to_proper_length(x, self._config["common_divider"], clip=True, testing=True), num_parallel_calls=AUTOTUNE)
 
         # extract tensors
@@ -146,7 +155,7 @@ class Preprocessor():
         ds = ds.map(lambda x, y: (x, {"classifier": y}), num_parallel_calls=AUTOTUNE)
 
         ds = ds.batch(self._config['batch_size']).prefetch(AUTOTUNE)
-        self.datasets["test"] = ds
+        self.datasets[mode] = ds
         self.logger.info('done preprocessing and augmenting test data')
     
     def preprocess_wav(self, ds):
@@ -243,7 +252,7 @@ class Preprocessor():
 
     @property
     def available_modi(self):
-        return ['train', 'val', 'test', 'noise']
+        return ['train', 'val', 'test', 'noise', 'fma']
     
     @property
     def train_ds(self):
@@ -260,3 +269,7 @@ class Preprocessor():
     @property
     def noise_ds(self):
         return self.datasets['noise']
+    
+    @property
+    def fma_ds(self):
+        return self.datasets['fma']

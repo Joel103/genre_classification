@@ -9,3 +9,5 @@ noise/
 test/
 train/
 val/
+fma/
+*.npy

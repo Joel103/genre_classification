@@ -52,7 +52,7 @@ class Network():
         # compile model
         self._model.compile(optimizer=self._optimizer,
                           loss=self.loss(None, None),
-                          loss_weights={"decoder":1, "classifier": 0.1},
+                          loss_weights={"decoder":1, "classifier": 0.005},
                           metrics=self.metrics(None, None))
         
     def save(self):
