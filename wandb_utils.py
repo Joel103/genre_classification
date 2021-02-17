@@ -175,20 +175,21 @@ class WandbWrapper():
                         tag (str): The tag under which the samples should be visible (you could also use track name)
                         **imshow_kwargs (keywords/dict): all other keywords go directly to the imshow call
         '''
-        fig, (ax0) = plt.subplots(1, figsize=(16, 3), dpi=300)
+        fig, (ax0) = plt.subplots(1, figsize=(7, 5), dpi=100)
         if not prediction is None:
             plt.close()
-            fig, (ax0, ax1) = plt.subplots(2, sharex=True, figsize=(16, 6), dpi=300)
+            fig, (ax0, ax1) = plt.subplots(1, 2, sharey=True, figsize=(12, 5), dpi=100)
         im = ax0.imshow(data, interpolation=None, aspect="auto", **imshow_kwargs)
         if not prediction is None:
             im = ax1.imshow(prediction, interpolation=None, aspect="auto", **imshow_kwargs)
             fig.colorbar(im, ax=(ax0,ax1))
         else:
             fig.colorbar(im, ax=ax0)
-        ax0.set_title(title)
-        wandb.log({tag: wandb.Image(plt)})
+        plt.suptitle(title)
+        image = wandb.Image(plt)
         plt.close()
-
+        return image
+    
     def post_plt_histogram(self, data, prediction=None, title="", tag="", **hist_kwargs):
         '''
         Uploads one or two histograms to W&B. In the case of two we make an overlay in one plot.
@@ -200,12 +201,13 @@ class WandbWrapper():
                         tag (str): The tag under which the samples should be visible (you could also use track name)
                         **hist_kwargs (keywords/dict): all other keywords go directly to the hist call
         '''
-        fig, ax = plt.subplots(figsize=(5, 5), dpi=300)
+        fig, ax = plt.subplots(figsize=(5, 5), dpi=100)
         plt.hist(data.ravel(), facecolor='r', label="Image", **hist_kwargs)
         if not prediction is None:
             plt.hist(prediction.ravel(), facecolor='g', label="Prediction", **hist_kwargs)
         plt.legend()
         plt.title(title)
         plt.tight_layout(pad=1.2, h_pad=0.2, w_pad=0.2)
-        wandb.log({tag: wandb.Image(plt)})
+        image = wandb.Image(plt)
         plt.close()
+        return image

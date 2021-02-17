@@ -7,3 +7,5 @@ pydub
 wandb==0.10.15
 soundfile
 plotly
+pandas
+librosa
