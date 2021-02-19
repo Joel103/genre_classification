@@ -74,6 +74,7 @@ class Network():
         
         # load weights into new model
         self._model = tf.keras.models.load_model("%sweights.%05d" % (model_path, epoch))
+        self._encoder_only = [layer for layer in self._model.layers if "encoder_only" in layer._name][0]
         self._epoch = epoch
         self._model_path = model_path
         
