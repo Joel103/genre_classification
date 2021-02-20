@@ -32,7 +32,7 @@
         "common_divider": 64,
         "num_classes": 10,
         "tf_dataset_save_path": "/tmp/",
-        "seed": 7455978170619469336
+        "seed": 1921050234
     },
 
     "model_parameter":
@@ -57,6 +57,6 @@
         "loss": {"decoder": "mae", "classifier": "categorical_crossentropy"},
         "metrics": {"decoder": ["mse", "mae"], "classifier": ["accuracy"]},
         "loss_weights": {"decoder":1, "classifier": 0.005},
-        "seed" : 4280509752018212181
+        "seed" : 1025696111
     }
 }
