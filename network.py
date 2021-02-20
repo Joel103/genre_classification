@@ -21,13 +21,22 @@ import tensorflow.keras.backend as K
 import numpy as np
 import datetime
 import os
-import ae_model
+from resnet import *
+from resnet_decoder import *
 
 class Network():
     def __init__(self, *args, verbose=0, **kwargs):
         self._model_parameter, self._training_parameter = args
         self._model_path = "./models/%s/" % str(datetime.datetime.now()).replace(" ","_")
         self._verbose = verbose
+        
+        self._embedding_size = self._model_parameter["embedding_size"]
+        self._input_shape = self._model_parameter["input_shape"]
+        self._num_classes = self._model_parameter["num_classes"]
+        
+        self._loss = self._training_parameter["loss"]
+        self._metrics = self._training_parameter["metrics"]
+        self._loss_weights = self._training_parameter["loss_weights"]
         
         # setting the precision to mixed if float16 is desired in training_parameter
         self._set_precision(self._training_parameter["calculation_dtype"], self._training_parameter["calculation_epsilon"])
@@ -51,15 +60,16 @@ class Network():
     def compile(self):
         # compile model
         self._model.compile(optimizer=self._optimizer,
-                          loss=self.loss(None, None),
-                          loss_weights={"decoder":1, "classifier": 0.005},
-                          metrics=self.metrics(None, None))
+                          loss=self._loss,
+                          loss_weights=self._loss_weights,
+                          metrics=self._metrics)
         
     def save(self):
         #create model directory first
         os.makedirs(self._model_path, exist_ok=True)
+        os.makedirs(f"{self._model_path}weights", exist_ok=True)
         try:
-            self._model.save("%sweights.%05d" % (self._model_path, self._epoch), save_format="tf")
+            self._model.save("%sweights/%05d" % (self._model_path, self._epoch), save_format="tf")
             if self._verbose:
                 print("Saved model to disk")
         except RuntimeError:
@@ -73,7 +83,7 @@ class Network():
             model_path = self._model_path
         
         # load weights into new model
-        self._model = tf.keras.models.load_model("%sweights.%05d" % (model_path, epoch))
+        self._model = tf.keras.models.load_model("%sweights/%05d" % (model_path, epoch))
         self._encoder_only = [layer for layer in self._model.layers if "encoder_only" in layer._name][0]
         self._epoch = epoch
         self._model_path = model_path
@@ -103,6 +113,10 @@ class Network():
         self._epoch = value
     
     @property
+    def model_path(self):
+        return self._model_path
+    
+    @property
     def config_path(self):
         return self._model_path + "config.json"
         
@@ -120,26 +134,31 @@ class Network():
             mixed_precision.set_global_policy(policy)
             
     def _create_model(self):
-        ae_model.register_custom_objects()
-        #ae_model.get_custom_objects()
-        number_classes = 10
         
-        # initial definition of the sequential model
-        (self._encoder_input, self._encoder_only) = ae_model.create_encoder(self._model_parameter["encoder_input"], self._model_parameter["encoder"])
-        (self._decoder_input, self._decoder_only) = ae_model.create_decoder(self._model_parameter["decoder"], self._model_parameter["finalizer"], self._model_parameter["output"])
-        
+        model_input_shape = self._input_shape
+        channel_dims = self._embedding_size
+
+        # encoder network
+        self._encoder_input = tf.keras.Input(shape=model_input_shape)
+        resnet = ResNet18(num_classes=channel_dims)
+        encoder_output = tf.keras.layers.Reshape((1, channel_dims))(resnet(self._encoder_input))
+        self._encoder_only = tf.keras.Model(inputs=self._encoder_input, outputs=encoder_output, name="encoder_only")
+
+        # decoder network
+        self._decoder_input = tf.keras.Input(shape=[None, channel_dims])
+        decoder = Basic_Decoder()
+        decoder_output = tf.keras.layers.Reshape(model_input_shape)(decoder(tf.keras.layers.Reshape((1, 1, channel_dims))(self._decoder_input)))
+        self._decoder_only = tf.keras.Model(inputs=self._decoder_input, outputs=decoder_output, name="decoder_only")
+
         # classifier
         classifier = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation='relu'),
-            tf.keras.layers.Dense(64, activation='relu'),
-            tf.keras.layers.Dense(number_classes, activation='softmax')
-        ], name="classifier")
+            tf.keras.layers.Dense(self._num_classes, activation='softmax')
+        ], name="classifier_only")
         
-        encoder = self._encoder_only(self._encoder_input)
         # combine networks
-        autoencoder_output = self._decoder_only(encoder)
+        autoencoder_output = self._decoder_only(encoder_output)
         # classifier output
-        classifier_output = classifier(encoder)
+        classifier_output = classifier(encoder_output)
         
         autoencoder = tf.keras.Model(inputs=self._encoder_input, 
                                      outputs={"decoder": autoencoder_output, "classifier": classifier_output}, name="autoencoder")
@@ -175,23 +194,3 @@ class Network():
                             }
         
         self._optimizer = keras.optimizers.get(optimizer_config)
-        
-    def loss(self, y_true, y_pred):
-        # calc mean over the batch dimension
-        #return K.mean(self._calc_loss(y_true, y_pred), axis=0, keepdims=True)
-        return { "decoder": "mae", "classifier": "categorical_crossentropy", }
-        
-    def metrics(self, y_true, y_pred):
-        # return <some metrics>
-        metrics = {}
-        metrics["decoder"] = ["mse"]
-        metrics["decoder"] += ["mae"]
-        metrics["classifier"] = ["accuracy"]
-        return metrics
-    
-    def _calc_loss(self, labels, predictions):
-        #return <loss for each and every example>
-        bce = tf.keras.losses.BinaryCrossentropy(
-                    from_logits=False, label_smoothing=0, reduction=tf.keras.losses.Reduction.NONE,
-                    name='binary_crossentropy')
-        return bce(labels, predictions, sample_weight=None)

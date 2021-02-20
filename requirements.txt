@@ -4,8 +4,9 @@ tensorflow==2.4.1
 tensorflow-io
 tensorflow-datasets
 pydub
-wandb==0.10.15
+wandb==0.10.19
 soundfile
 plotly
 pandas
 librosa
+tqdm

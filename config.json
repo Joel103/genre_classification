@@ -1,28 +1,62 @@
 {
     "data_parameter":
     {
-        "data": "./data/",
-        "batch_size": 32
+        "data_root": "gtzan",
+        "data_dir": "data/tfds/",
+        "noise_root": "data/fsdkaggle2018/FSDKaggle2018.audio_test/",
+        "noise_labels": "data/fsdkaggle2018/FSDKaggle2018.meta/test_post_competition_scoring_clips.csv",
+        "noise_classes": ["Meow", "Cough", "Computer_keyboard", "Telephone", "Keys_jangling", "Knock", "Microwave_oven", "Finger_snapping", "Bark", "Laughter", "Drawer_open_or_close"],
+        "desired_samples": 22050,
+        "fma_root": "data/fma_small_wav/",
+        "fma_labels": "data/fma_small_wav/fma_labels.csv",
+        "desired_channels": 1,
+        "sample_rate": 22050,
+        "nfft": 2048,
+        "window": 2048,
+        "stride": 1024,
+        "mels": 64,
+        "fmin_mels": 0,
+        "fmax_mels": 8000,
+        "time_mask": 10,
+        "freq_mask": 10,
+        "SNR": 1.0,
+        "shuffle_buffer_size": 1000,
+        "roll_val": 64,
+        "top_db": 80,
+        "param_db": 10,
+        "train_size": 0.7,
+        "val_size": 0.2,
+        "test_size": 0.1,
+        "batch_size": 64,
+        "inference_batch_size": 1024,
+        "common_divider": 64,
+        "num_classes": 10,
+        "tf_dataset_save_path": "/tmp/",
+        "seed": 7455978170619469336
     },
 
     "model_parameter":
     {
-        
+        "embedding_size": 1024,
+        "input_shape": [64, 64, 1],
+        "num_classes": 10
     },
 
     "training_parameter":
     {
-        "epochs": 1000,
-        "save_steps": 50,
-        "embedding_period": 50,
-        "reconstruction_period": 50,
+        "epochs": 5000,
+        "save_steps": 100,
+        "embedding_period": 100,
+        "reconstruction_period": 100,
         "learning_rate": 0.001,
         "optimizer_class_name": "adam",
         "optimizer_parameter": {"beta_1": 0.9, "beta_2": 0.999, "epsilon": 1e-07},
         "optimizer_clip_parameter": {"clipnorm": 1.0, "clipvalue": 2.0},
-        "dropout_rate": 0.2,
         "calculation_dtype" : "float32",
         "calculation_epsilon" : 1e-7,
-        "seed" : null
+        "loss": {"decoder": "mae", "classifier": "categorical_crossentropy"},
+        "metrics": {"decoder": ["mse", "mae"], "classifier": ["accuracy"]},
+        "loss_weights": {"decoder":1, "classifier": 0.005},
+        "seed" : 4280509752018212181
     }
 }

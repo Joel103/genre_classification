@@ -1,20 +1,10 @@
-import os
-import math
-
-import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
-import random
-
 import logging
-
 from prep_utils import *
-
+from utils import update
 import tensorflow_datasets as tfds
 
 AUTOTUNE = tf.data.AUTOTUNE
-
-assert tf.__version__ >= '2.4.0'
 
 class Preprocessor():
     '''
@@ -22,37 +12,31 @@ class Preprocessor():
     '''
     def __init__(self, config):
         self._config = config
-        self.dataset = None
-        self.noise_dataset = None
-        self.ready = False
-        self.logger = None
-        self.noisy_samples = None
-        self.num_classes = 10
-        
+        self.logger = None        
         self.datasets = { key : None for key in self.available_modi}
         
     def get_config(self):
         return self._config
     
     def set_config(self, update_dict):
-        self._config.update(update_dict)
+        self._config = update(self._config, update_dict)
         return self._config
     
     @tf.autograph.experimental.do_not_convert
     def load_fma(self):
-        meta = pd.read_csv("data/fma_labels.csv")
+        meta = pd.read_csv(self._config["fma_labels"])
         filename = meta["filename"].values
         labels = meta["label"].values
-        ds = tf.data.Dataset.from_tensor_slices({'noise': filename, 'label': labels})
-        ds = ds.map(lambda x: get_waveform(x, "/media/", -1), num_parallel_calls=AUTOTUNE)
+        ds = tf.data.Dataset.from_tensor_slices({"noise": filename, "label": labels})
+        ds = ds.map(lambda x: get_waveform(x, self._config["fma_root"], self._config['desired_channels'], -1), num_parallel_calls=AUTOTUNE)
         self.datasets['fma'] = ds
 
     @tf.autograph.experimental.do_not_convert
-    def load_data(self, download=False, data_dir="tensorflow_datasets"):
-        # tbd - data has to be downloaded first 
+    def load_data(self, download=False):
+        # NOTE: data has to be downloaded first 
         dataset, self.ds_info = tfds.load(self._config['data_root'],
                                                with_info=True,
-                                               data_dir=data_dir,
+                                               data_dir=self._config["data_dir"],
                                                download=download,
                                                split=['train'])
         dataset = dataset[0]
@@ -69,20 +53,20 @@ class Preprocessor():
         self.datasets["val"] = self.datasets["test"].skip(test_size)
         self.datasets["test"] = self.datasets["test"].take(test_size)
 
-        meta = pd.read_csv(self._config['noise_path'], index_col='fname')
+        meta = pd.read_csv(self._config["noise_labels"], index_col="fname")
         labels = meta.label
         
-        noise_classes = ['Meow', 'Cough', 'Computer_keyboard', 'Telephone',
-                         'Keys_jangling', 'Knock', 'Microwave_oven', 'Finger_snapping',
-                         'Bark', 'Laughter', 'Drawer_open_or_close']
-        noise_data = meta.loc[meta['label'].isin(noise_classes)].index.values
+        noise_classes = self._config["noise_classes"]
+        noise_data = meta.loc[meta["label"].isin(noise_classes)].index.values
 
-        noise_ds2 = tf.data.Dataset.from_tensor_slices({'noise': noise_data,
-                                                        'label': [0]*len(noise_data)})
+        # the "label" is not important as it is discarded later on
+        noise_ds = tf.data.Dataset.from_tensor_slices({"noise": noise_data,
+                                                        "label": [0]*len(noise_data)})
 
-        self.datasets['noise'] = noise_ds2.map(lambda x: get_waveform(x,
+        self.datasets['noise'] = noise_ds.map(lambda x: get_waveform(x,
                                                                   self._config['noise_root'],
-                                                                  self._config['sample_rate']),
+                                                                  self._config['desired_channels'],
+                                                                  self._config['desired_samples']),
                                            num_parallel_calls=AUTOTUNE)
         
         if self.logger is not None:
@@ -137,41 +121,33 @@ class Preprocessor():
         ds = ds.flat_map(lambda x,y: self.flatten(x,y))
         ds = ds.map(lambda x, y: (x, {"decoder": x, "classifier": y}), num_parallel_calls=AUTOTUNE)
 
+        ds = ds.shuffle(self._config['shuffle_buffer_size'])
         ds = ds.batch(self._config['batch_size']).prefetch(AUTOTUNE)
         self.datasets[mode] = ds
         self.logger.info(f'done preprocessing and augmenting {mode} data')
 
     def launch_test_pipeline(self, mode="test"):
-        
+        assert self.logger is not None
+        assert mode in ["test", "fma"]
+
         self.logger.info('started preprocessing and augmenting test data')
         
         ds = self.datasets[mode]
         ds = ds.map(lambda x: wrapper_shape_to_proper_length(x, self._config["common_divider"], clip=True, testing=True), num_parallel_calls=AUTOTUNE)
 
         # extract tensors
-        ds = ds.map(lambda x: wrapper_dict2tensor(x, features=['mel', 'label']), num_parallel_calls=AUTOTUNE)
+        ds = ds.map(lambda x: wrapper_dict2tensor(x, features=["mel", "label"]), num_parallel_calls=AUTOTUNE)
         # here we do an reshape of the image to subimages and replicate the label for all of them
         ds = ds.flat_map(lambda x,y: self.flatten(x,y))
         ds = ds.map(lambda x, y: (x, {"classifier": y}), num_parallel_calls=AUTOTUNE)
 
-        ds = ds.batch(self._config['batch_size']).prefetch(AUTOTUNE)
+        ds = ds.batch(self._config["inference_batch_size"]).prefetch(AUTOTUNE)
         self.datasets[mode] = ds
         self.logger.info('done preprocessing and augmenting test data')
     
     def preprocess_wav(self, ds):
         ds = ds.map(lambda x: wrapper_cast_offline(x), num_parallel_calls=AUTOTUNE)
-        # Not necessary anymore
-        #ds = ds.map(lambda x: wrapper_cut_15(x), num_parallel_calls=AUTOTUNE)
-        ds = ds.map(lambda x: wrapper_rescale(x), num_parallel_calls=AUTOTUNE)
-        # TypeError: Expected int64 passed to parameter 'y' of op 'Greater', got 0.1 of type 'float' instead. Error: Expected int64, got 0.1 of type 'float' instead.
-        #ds = ds.map(lambda x: wrapper_trim(x, self._config['epsilon']), num_parallel_calls=AUTOTUNE)
-
-        '''
-        ds = ds.map(lambda x: wrapper_change_pitch(x, self._config['shift_val'], self._config['bins_per_octave'], self._config['sample_rate']), num_parallel_calls=AUTOTUNE)
-        ds = ds.map(lambda x: wrapper_fade(x, self._config['fade']), num_parallel_calls=AUTOTUNE)
-        ds = ds.map(lambda x: wrapper_normalize(x), num_parallel_calls=AUTOTUNE)
-        '''
-        
+        ds = ds.map(lambda x: wrapper_rescale(x), num_parallel_calls=AUTOTUNE)        
         return ds
 
     def to_log_mel(self, ds):
@@ -195,7 +171,6 @@ class Preprocessor():
     def offline_preprocessing(self, mode='val'):
         '''
         create spectrograms to spare processing time due to fourier transforms
-        mode in self.available_modi (['noise', 'train', 'val', 'test'])
         '''
         assert mode in self.available_modi
         
@@ -222,7 +197,7 @@ class Preprocessor():
             ds = ds.map(lambda x: wrapper_pack(x), num_parallel_calls=AUTOTUNE)
             
             # saving
-            tf.data.experimental.save(ds, f"./{mode}/ds/", compression=None, shard_func=None)
+            tf.data.experimental.save(ds, f"{self._config['tf_dataset_save_path']}/{mode}/", compression=None, shard_func=None)
             self.datasets[mode] = ds
             
             self.logger.info(f'done saving data for {mode}')
@@ -233,21 +208,21 @@ class Preprocessor():
                 continue
 
             # loading
-            ds = tf.data.experimental.load(f"./{mode}/ds/", (
+            ds = tf.data.experimental.load(f"{self._config['tf_dataset_save_path']}/{mode}/", (
                 tf.TensorSpec(shape=(), dtype=tf.int32), # label
                 tf.TensorSpec(shape=(None, None), dtype=tf.float32), # mel
                 tf.TensorSpec(shape=(2), dtype=tf.int32), # shape
             ), compression=None, reader_func=None)
             ds = ds.map(lambda label, mel, shape: {"label":label, "mel":mel, "shape":shape}, num_parallel_calls=AUTOTUNE)
 
-            self.datasets[mode] = ds
+            self.datasets[mode] = ds.cache()
             
             self.logger.info(f'done loading data for {mode}')
 
     def flatten(self, x, y):
         x_ds = tf.data.Dataset.from_tensor_slices(tf.reshape(x, (-1, self._config["common_divider"], self._config["common_divider"], 1)))
         y_ds = tf.data.Dataset.from_tensor_slices(tf.reshape(y,(1,-1))).repeat()
-        y_ds = y_ds.map(lambda y: tf.one_hot(y, self.num_classes))
+        y_ds = y_ds.map(lambda y: tf.one_hot(y, self._config["num_classes"]))
         return tf.data.Dataset.zip((x_ds.flat_map(lambda x: tf.data.Dataset.from_tensor_slices([x])), y_ds))
 
     @property

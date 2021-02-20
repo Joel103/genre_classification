@@ -23,6 +23,7 @@ class ReconstructImages(tf.keras.callbacks.Callback):
         self.period = period
         self.dataset = dataset
         self.wandb_wrapper = wandb_wrapper
+        self.plot_images = 5
         
     def on_epoch_end(self, epoch, logs=None):
         if self.network.epoch % self.period == 0:
@@ -39,7 +40,7 @@ class ReconstructImages(tf.keras.callbacks.Callback):
             prediction = self.network.predict_on_batch(elem[0])["decoder"]
             indices = np.arange(batch_size)
             np.random.shuffle(indices)
-            for index in indices[:5]:
+            for index in indices[:self.plot_images]:
                 x = elem[0][index][..., 0].numpy().astype(np.float32).T
                 y = prediction[index][..., 0].astype(np.float32).T
                 images += [self.wandb_wrapper.post_plt_image(x, y, title="Images", tag="side-by-side-images")]
@@ -54,6 +55,7 @@ class CreateEmbedding(tf.keras.callbacks.Callback):
         self.period = period
         self.dataset = dataset
         self.num_classes = num_classes
+        self._plotted_random_samples = 1000
         
     def on_epoch_end(self, epoch, logs=None):
         if self.network.epoch % self.period == 0:
@@ -77,26 +79,27 @@ class CreateEmbedding(tf.keras.callbacks.Callback):
                 collect_labels += [tf.argmax(y, axis=1)]
         
         ''' Perform T-SNE '''
-        embeddings = tf.concat(collect_embeddings, axis=0)
-        labels = np.concatenate(collect_labels, axis=0)
-        x = tf.reshape(embeddings,(-1,embeddings.shape[-1]))
-        X_embedded = TSNE(n_components=2).fit_transform(x)
-
+        embeddings = tf.concat(collect_embeddings, axis=0).numpy()
+        labels = tf.concat(collect_labels, axis=0).numpy()
+        X_embedded = TSNE(n_components=2).fit_transform(np.squeeze(embeddings))
+        
         ''' Some Preparation For Colored Plotting '''
         collect_colors_markers = {}
         prop_cycle = plt.rcParams['axes.prop_cycle']
         colors = cycle(prop_cycle.by_key()['color'])
         markers = cycle(('o', ','))
-
+        
         for i in range(self.num_classes):
             collect_colors_markers[i] = (next(colors), next(markers))
 
         ''' Scatter Plot Embeddings '''
+        indices = np.random.choice(labels.shape[0], self._plotted_random_samples, replace=False)
         # Create figure
         fig = plt.figure(figsize=(8, 8))
         # Add scatter plot
         ax = fig.add_subplot(111)
-        for embedding, label in zip(X_embedded, labels):
+        ax.scatter(X_embedded[:, 0], X_embedded[:, 1], alpha=0.25, s=0.1, c="gray")
+        for embedding, label in zip(X_embedded[indices], labels[indices]):
             ax.scatter(embedding[0], embedding[1], alpha=0.5, c=collect_colors_markers[label][0], marker=collect_colors_markers[label][1])
 
         ax.xaxis.set_major_formatter(NullFormatter())
@@ -106,3 +109,4 @@ class CreateEmbedding(tf.keras.callbacks.Callback):
         # send to wandb
         wandb.log({"test embedding - label colored": wandb.Image(plt)})
         plt.close()
+        return embeddings, labels

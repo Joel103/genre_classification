@@ -1,4 +1,4 @@
 #!/bin/bash
-jupyter nbconvert --to script main.ipynb
+jupyter nbconvert --to script Training.ipynb
 # execute converted file and use the arguments after the '--'
-ipython main.py -- # --batch_size 16 --epochs 1000 # here you could place even more arguments...
+ipython Training.py -- -c '{"training_parameter":{"loss_weights":{"classifier":0.1}}}' # here you could place even more arguments...

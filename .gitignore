@@ -3,11 +3,6 @@ _data
 .ipynb_checkpoints
 __pycache__
 main.py
+Training.py
+Data_Preprocessing.py
 *.log
-
-noise/
-test/
-train/
-val/
-fma/
-*.npy
