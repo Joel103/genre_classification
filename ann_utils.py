@@ -57,25 +57,47 @@ class ANN():
         else:
             raise NotImplementedError('Sorry, no time to implement this yet.')
     
-    def supervised_evaluation(self, top_x=2):
+    def supervised_evaluation(self, top_x=2, double_vote=True):
         '''
         see if labels assigned by voting really match closest neighbors 
         '''
-        self.predictions = []
-        for embed_vec in self.base_population:
-            self.predictions.append(self.assign_label(embed_vec))
-        self.top_x = np.sum([label in pred for label, pred in zip(self.labels, self.predictions)])/len(self.labels)
-        self.assigned_classes = np.sum([label == pred[0] for label, pred in zip(self.labels, self.predictions)]) /len(self.labels)
-        print(self._evaluation_report(top_x))
+        self.predictions = {}
+        self.sub_predictions = []
+        for embed_vec, filename, genre in zip(self.base_population, self.filenames, self.labels):
+            mc = list(self.assign_label(embed_vec))
+            self.sub_predictions.append(mc)
+            if filename in self.predictions.keys():
+                self.predictions[filename][0].extend(mc)
+            else:
+                self.predictions[filename] = [mc, genre]
         
-        unit_predictions = [pred[0] for pred in self.predictions]
+        # top x sub_track classification
+        self.top_x = np.sum([label in pred for label, pred in zip(self.labels, self.sub_predictions)])/len(self.labels)
         
-        self.classification_report = classification_report(self.labels, unit_predictions, target_names=self.genre_names)
-        self.confusion_matrix = confusion_matrix(self.labels, unit_predictions, labels=range(len(self.genre_names)))
+        squeezed_labels = np.array([self.predictions[filename][1] for filename in self.predictions])
+        if double_vote:
+            # song-genre classification
+            most_commons = np.array([Counter(self.predictions[filename][0]).most_common()[0][0] for filename in self.predictions])
+            self.assigned_classes = np.sum(most_commons == squeezed_labels) /len(squeezed_labels)
+            self.classification_report = classification_report(squeezed_labels, most_commons, target_names=self.genre_names)
+            self.confusion_matrix = confusion_matrix(squeezed_labels, most_commons, labels=range(len(self.genre_names)))
+        else:
+            # sub-track-genre classification
+            most_commons = np.array([Counter(knns).most_common()[0][0] for knns in self.sub_predictions])
+            self.assigned_classes = np.sum(most_commons==self.labels)/len(self.labels)
+            self.classification_report = classification_report(self.labels, most_commons, target_names=self.genre_names)
+            self.confusion_matrix = confusion_matrix(self.labels, most_commons, labels=range(len(self.genre_names)))
+            
+        print(self._evaluation_report(top_x, double_vote))
+        
+#         unit_predictions = [pred[0] for pred in self.predictions]
+        
+        
     
-    def _evaluation_report(self, top_x):
-        out_str = f'classification acc: {100 * np.round(self.assigned_classes, 2)}% \n'
-        out_str += f'top_{top_x} classification acc: {100 * np.round(self.top_x, 2)}%'
+    def _evaluation_report(self, top_x, double_vote):
+        out = 'song-' if double_vote else 'sub-track-'
+        out_str = f'{out}classification acc: {100 * np.round(self.assigned_classes, 2)}% \n'
+        out_str += f'top_{top_x} sub-track-classification acc: {100 * np.round(self.top_x, 2)}%'
         return out_str
     
     def assign_label(self, sample_vec, knn=30, top_x=2):
@@ -97,6 +119,12 @@ class ANN():
         pass
     
     def _plot_tsne_lite(self, size):
+        
+        idx = np.random.choice(np.arange(len(self.labels)), size, replace=False)
+        
+        self.base_tsne = self.tsne_output[idx]
+        self.labels_tsne = self.labels[idx]  
+        
         plt.figure(figsize=(20,8))
         plt.scatter(self.base_tsne[:,0], self.base_tsne[:,1], c=self.base_tsne, alpha=0.2)
         plt.show()
