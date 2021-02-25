@@ -80,7 +80,7 @@ class ResNet(tf.keras.Model):
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
 
         self.avg_pool2d = tf.keras.layers.GlobalAveragePooling2D()
-        self.linear = tf.keras.layers.Dense(units=num_classes, activation="softmax")
+        self.linear = tf.keras.layers.Dense(units=num_classes, activation="sigmoid")
         self.activation = tf.keras.layers.ReLU()
 
     def _make_layer(self, block, out_channels, num_blocks, stride):

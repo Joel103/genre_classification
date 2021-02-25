@@ -27,7 +27,7 @@
 ## How to execute
 * Execute "Data_Preprocessing.ipynb" once (1 dataset)
 * Execute "Training.ipynb" once per training
-* Execute ? once per model to evalute embedding and classify genres/songs
+* Execute "ANN_Inference.ipynb" once per trained model to evalute embedding and classify genres/songs
 
 ## W&B alternative login for CI/CD:
 * ```export WANDB_ENTITY=dl4aed```
