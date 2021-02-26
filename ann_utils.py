@@ -6,6 +6,7 @@ from collections import Counter
 from sklearn.manifold import TSNE
 from sklearn.metrics import classification_report
 from sklearn.metrics import confusion_matrix
+import os
 
 class ANN():
     '''
@@ -30,13 +31,20 @@ class ANN():
         
         self.annoy_index = AnnoyIndex(self.embedding_size, metric)
         
-        
-        # add population
-        for sample_id, embedding in enumerate(self.base_population):
-            self.annoy_index.add_item(sample_id, embedding)
-        
-        # build 
-        self.annoy_index.build(n_trees)
+        annoy_path = base_population_path + ".ann"
+        if os.path.isfile(annoy_path):
+            # load
+            self.annoy_index.load(annoy_path)
+        else:
+            # add population
+            for sample_id, embedding in enumerate(self.base_population):
+                self.annoy_index.add_item(sample_id, embedding)
+
+            # build
+            self.annoy_index.build(n_trees)
+            
+            #save
+            self.annoy_index.save(annoy_path)
         
     def _prepare_tsne(self):
         print('working on TSNE. Might take a while')
