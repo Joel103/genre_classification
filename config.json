@@ -56,7 +56,7 @@
         "calculation_epsilon" : 1e-7,
         "loss": {"decoder": "mae", "classifier": "categorical_crossentropy"},
         "metrics": {"decoder": ["mse", "mae"], "classifier": ["accuracy"]},
-        "loss_weights": {"decoder":1, "classifier": 0.001},
+        "loss_weights": {"decoder":1, "classifier": 0.005},
         "seed" : 1025696111
     }
 }

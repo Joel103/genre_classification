@@ -152,6 +152,8 @@ class Network():
 
         # classifier
         classifier = tf.keras.Sequential([
+            tf.keras.layers.Dense(128, activation='relu'),
+            tf.keras.layers.Dense(64, activation='relu'),
             tf.keras.layers.Dense(self._num_classes, activation='softmax')
         ], name="classifier_only")
         
