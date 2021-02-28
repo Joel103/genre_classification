@@ -88,10 +88,7 @@ class ANN():
             self.classification_report = classification_report(self.labels, most_commons, target_names=self.genre_names)
             self.confusion_matrix = confusion_matrix(self.labels, most_commons, labels=range(len(self.genre_names)))
             
-        print(self._evaluation_report(top_x, double_vote))
-        
-#         unit_predictions = [pred[0] for pred in self.predictions]
-        
+        print(self._evaluation_report(top_x, double_vote))            
         
     
     def _evaluation_report(self, top_x, double_vote):
