@@ -100,8 +100,6 @@ class ANN():
         
 #         unit_predictions = [pred[0] for pred in self.predictions]
         
-        
-    
     def _evaluation_report(self, top_x, double_vote):
         out = 'song-' if double_vote else 'sub-track-'
         out_str = f'{out}classification acc: {100 * np.round(self.assigned_classes, 2)}% \n'
@@ -149,8 +147,6 @@ class ANN():
         plt.figure(figsize=(20,8))
         plt.scatter(self.base_tsne[:,0], self.base_tsne[:,1], c=self.labels_tsne, alpha=0.8)
         plt.show()
-
-        
     
     def _load_population(self):
         if self.experimental_size > -1:
