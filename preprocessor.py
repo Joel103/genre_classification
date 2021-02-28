@@ -5,6 +5,7 @@ from utils import update
 import tensorflow_datasets as tfds
 
 AUTOTUNE = tf.data.AUTOTUNE
+''' The preprocessor class which does everything related to data (loading, preprocessing, etc.)'''
 
 class Preprocessor():
     '''

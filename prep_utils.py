@@ -3,6 +3,7 @@ import tensorflow_io as tfio
 import os
 import time
 
+''' Util functions used for the tf.data.Dataset pipeline ''' 
 #============================== PREPROCESSING ==============================
 
 def wrapper_cast(x):
@@ -133,6 +134,7 @@ def wrapper_roll(x, roll_val):
     x['mel_noise'] = tf.roll(x['mel_noise'], roll_tensor, axis=0)
     return x
 
+# TODO: The RMS calculation might still be off
 def get_noise_from_sound(signal, noise, SNR):
     # current RMS of signal
     centered_signal = signal-tf.reduce_mean(signal)

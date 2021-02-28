@@ -20,9 +20,15 @@
     * ```wandb login```
 
 ## How to execute
-* Execute "Data_Preprocessing.ipynb" once (1 dataset)
-* Execute "Training.ipynb" once per training
-* Execute "ANN_Inference.ipynb" once per trained model to evalute embedding and classify genres/songs
+* Execute "Data_Preprocessing.ipynb" once (saves the dataset e.g. in /tmp/ folder)
+* Execute "Training.ipynb" once per training (trains model and saves it into models/ folder)
+* Execute "ANN_Inference.ipynb" once per trained model to evalute embedding and classify genres/songs (creates ANN/Plots/Metrics of a model)
+
+
+## How to configure
+* The data preparation and the model training is configured via the "config.json"
+* You can also use command line arguments (also via W&B) and overwrite config settings during the execution
+* Leave it as it is, to reproduce our results
 
 ## W&B alternative login for CI/CD (silent login):
 * ```export WANDB_ENTITY=dl4aed```
@@ -35,11 +41,11 @@
 
 1. Integrate classifier model into training loop. ✅ 
 2. Build Inference pipeline: embed -> song-recognition. ✅ 
-3. Inspect & maybe implement Transfer Learning (for spectrograms?).
+3. Inspect & maybe implement Transfer Learning (for spectrograms?). 🔜
 4. Prepare slides. ✅ 
 5. Build ResNet-Model. ✅ 
 6. Test different dataset. ✅
-7. Extending scope lenght of each image (1 image should have longer temporal view than ~3 sec.).
+7. Extending scope lenght of each image (1 image should have longer temporal view than ~3 sec.). 🔜
 
 ## Git LFS
 * Install it on your local system: https://www.atlassian.com/git/tutorials/git-lfs#installing-git-lfs

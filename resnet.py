@@ -1,5 +1,5 @@
 #https://github.com/YunYang1994/TensorFlow2.0-Examples/blob/master/3-Neural_Network_Architecture/resnet.py
-
+''' A copy of the above code used to possibly customize the ResNet architecture'''
 
 import tensorflow as tf
 
