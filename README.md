@@ -10,14 +10,14 @@
 * We suggest to use the ```docker_environment.sh```file and adapting it, whether you have a GPU or not
 * Connect to the Jupyter interface of the container and login with the token printed by the container
 * Open a terminal or run it a notebook with a _bash cell_ or export _ENV Variables_ within the code:
- * ```pip install -r requirements.txt```
- * ```export WANDB_PROJECT=<desired project>```
- * For local testing only please also use(is default):
- ```export WANDB_MODE=dryrun```
- * For online tracking of the training use:
- ```export WANDB_MODE=run```
- * For synced training(online) run in a terminal(you need an W&B account for this):
- ```wandb login```
+  * ```pip install -r requirements.txt```
+  * ```export WANDB_PROJECT=<desired project>```
+  * For local testing only please also use(is default):
+    * ```export WANDB_MODE=dryrun```
+  * For online tracking of the training use:
+    * ```export WANDB_MODE=run```
+  * For synced training(online) run in a terminal(you need an W&B account for this):
+    * ```wandb login```
 
 ## How to execute
 * Execute "Data_Preprocessing.ipynb" once (1 dataset)
@@ -44,8 +44,7 @@
 ## Git LFS
 * Install it on your local system: https://www.atlassian.com/git/tutorials/git-lfs#installing-git-lfs
 * If you don't want to download the LFS files use ```GIT_LFS_SKIP_SMUDGE=1``` right before your ```git clone``` or ```git submodule```
-* If you want to fetch all of them later use in the command ```git lfs fetch --all```
-* Or just fetching a specific folder or excluding a file: https://github.com/git-lfs/git-lfs/blob/main/docs/man/git-lfs-fetch.1.ronn#options
+* If you want to fetch all of them later use in the command ```git lfs fetch --all``` _or_ just fetching specific folders or excluding a file: https://github.com/git-lfs/git-lfs/blob/main/docs/man/git-lfs-fetch.1.ronn#options
 * To checkout the fetched files into your repo use ```git lfs checkout```
 * Ignore errors like ```error: somefile: cannot add to the index - missing --add option?``` the file is still downloaded
 * If you did something wrong, discard all changes ```git reset --hard```
