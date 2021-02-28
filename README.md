@@ -48,3 +48,6 @@
 * To checkout the fetched files into your repo use ```git lfs checkout```
 * Ignore errors like ```error: somefile: cannot add to the index - missing --add option?``` the file is still downloaded
 * If you did something wrong, discard all changes ```git reset --hard```
+
+## Paper/Report
+* Is the file: "paper.pdf"
