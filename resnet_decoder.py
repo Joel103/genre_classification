@@ -1,4 +1,13 @@
-# https://github.com/YunYang1994/TensorFlow2.0-Examples/blob/master/3-Neural_Network_Architecture/resnet.py
+#================================================================
+#   Copyright (C) 2019 * Ltd. All rights reserved.
+#
+#   Editor      : VIM
+#   File name   : resnet.py
+#   Author      : YunYang1994
+#   Created date: 2019-10-11 19:16:55
+#   Description :
+#
+#================================================================
 ''' A *modified* copy of the above code used to possibly customize the ResNet architecture (use as Decoder)'''
 
 import tensorflow as tf
