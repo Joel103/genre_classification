@@ -8,6 +8,7 @@
 #   Description :
 #
 #================================================================
+''' A copy of the above code used to possibly customize the ResNet architecture'''
 
 import tensorflow as tf
 
