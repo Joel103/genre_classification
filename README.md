@@ -1,5 +1,7 @@
 # Code
 
+![Image](pipeline.png)
+
 ## How to clone
 * ```git clone git@git.tu-berlin.de:dl4aed-20/code.git```
 * Attention: Some submodules are large (most files are in Git LFS, see below in *Git LFS* how to work with it)
