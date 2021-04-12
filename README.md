@@ -1,7 +1,5 @@
 # Genre Classification and Song Fingerprinting
 
-![Image](pipeline.png)
-
 ## How to clone
 * ```git clone git@github.com:Joel103/genre_classification.git```
 * Attention: Some submodules are large (most files are in Git LFS, see below in *Git LFS* how to work with it)
