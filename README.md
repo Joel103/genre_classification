@@ -1,6 +1,6 @@
 # Genre Classification and Song Fingerprinting
 
-<img src="pipeline.png" width="800">
+<img src="pipeline.png" width="650">
 
 ## How to clone
 * ```git clone git@github.com:Joel103/genre_classification.git```
