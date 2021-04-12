@@ -3,7 +3,7 @@
 ![Image](pipeline.png)
 
 ## How to clone
-* ```git clone git@git.tu-berlin.de:dl4aed-20/code.git```
+* ```git clone git@github.com:Joel103/genre_classification.git```
 * Attention: Some submodules are large (most files are in Git LFS, see below in *Git LFS* how to work with it)
 * ```git submodule update --init```
 * ```git submodule update -r```
@@ -41,12 +41,12 @@
 
 ## Open Add-Ons
 
-1. Integrate classifier model into training loop. ✅ 
-2. Build Inference pipeline: embed -> song-recognition. ✅ 
+1. Integrate classifier model into training loop. ✔️ 
+2. Build Inference pipeline: embed -> song-recognition. ✔️ 
 3. Inspect & maybe implement Transfer Learning (for spectrograms?). 🔜
-4. Prepare slides. ✅ 
-5. Build ResNet-Model. ✅ 
-6. Test different dataset. ✅
+4. Prepare slides. ✔️ 
+5. Build ResNet-Model. ✔️ 
+6. Test different dataset. ✔️
 7. Extending scope lenght of each image (1 image should have longer temporal view than ~3 sec.). 🔜
 
 ## Git LFS
